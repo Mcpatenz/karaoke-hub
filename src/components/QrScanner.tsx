@@ -3,10 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { CameraOff, QrCode } from "lucide-react";
+import jsQR from "jsqr";
 import Button from "@/components/ui/Button";
 import Dialog from "@/components/ui/Dialog";
-
-const DEMO_CODE = "A7X29";
 
 interface QrScannerProps {
   open: boolean;
@@ -22,11 +21,19 @@ export default function QrScanner({ open, onClose, onScan }: QrScannerProps) {
   );
 }
 
+function extractRoomCode(text: string): string | null {
+  const urlMatch = text.match(/\/join\/([A-Za-z0-9]+)/);
+  if (urlMatch) return urlMatch[1];
+  if (/^[A-Za-z0-9]{4,8}$/.test(text.trim())) return text.trim();
+  return null;
+}
+
 function ScannerContent({ onClose, onScan }: Omit<QrScannerProps, "open">) {
   const reduce = useReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<number | null>(null);
+  const rafRef = useRef<number>(0);
   const onScanRef = useRef(onScan);
   const [cameraState, setCameraState] = useState<"starting" | "live" | "unavailable">(
     "starting",
@@ -39,12 +46,41 @@ function ScannerContent({ onClose, onScan }: Omit<QrScannerProps, "open">) {
   useEffect(() => {
     let cancelled = false;
     const stopCamera = () => {
-      if (timerRef.current) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
       }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+    };
+
+    const scanFrame = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState < 2) {
+        rafRef.current = requestAnimationFrame(scanFrame);
+        return;
+      }
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+
+      if (code?.data) {
+        const roomCode = extractRoomCode(code.data);
+        if (roomCode) {
+          onScanRef.current(roomCode);
+          return;
+        }
+      }
+      rafRef.current = requestAnimationFrame(scanFrame);
     };
 
     const startCamera = async () => {
@@ -66,10 +102,7 @@ function ScannerContent({ onClose, onScan }: Omit<QrScannerProps, "open">) {
           videoRef.current.play().catch(() => {});
         }
         setCameraState("live");
-        timerRef.current = window.setTimeout(
-          () => onScanRef.current(DEMO_CODE),
-          2600,
-        );
+        rafRef.current = requestAnimationFrame(scanFrame);
       } catch {
         if (!cancelled) setCameraState("unavailable");
       }
@@ -105,6 +138,7 @@ function ScannerContent({ onClose, onScan }: Omit<QrScannerProps, "open">) {
       </p>
 
       <div className="relative mx-auto aspect-square w-full max-w-[300px] overflow-hidden rounded-[var(--radius-sm)] border border-border-default bg-black">
+        <canvas ref={canvasRef} className="hidden" />
         {cameraState === "live" && (
           <video
             ref={videoRef}
@@ -138,7 +172,7 @@ function ScannerContent({ onClose, onScan }: Omit<QrScannerProps, "open">) {
         {cameraState === "live"
           ? "Scanning…"
           : cameraState === "unavailable"
-            ? "You can still join by simulating a scan."
+            ? "You can still join by entering the code manually."
             : "Starting camera…"}
       </p>
 
@@ -148,11 +182,12 @@ function ScannerContent({ onClose, onScan }: Omit<QrScannerProps, "open">) {
         </Button>
         <Button
           type="button"
+          variant="secondary"
           fullWidth
-          onClick={() => onScan(DEMO_CODE)}
+          onClick={onClose}
           disabled={cameraState === "starting"}
         >
-          {cameraState === "unavailable" ? "Use Demo Code" : "Simulate Scan"}
+          Enter Code Manually
         </Button>
       </div>
     </div>
