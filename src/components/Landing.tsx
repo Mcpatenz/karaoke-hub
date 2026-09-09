@@ -42,10 +42,14 @@ function JoinSection() {
 
   const joinRoom = () => {
     if (!roomCode.trim()) {
-      toast("Room code not found", "error");
+      toast("Enter a room code to join", "error");
       return;
     }
-    toast("Room joined");
+    if (!guestName.trim()) {
+      toast("Enter your singer name", "error");
+      return;
+    }
+    router.push(`/host/${roomCode.trim().toUpperCase()}`);
   };
 
   const handleScannedCode = useCallback(
@@ -53,8 +57,9 @@ function JoinSection() {
       setRoomCode(code);
       setScanOpen(false);
       toast(`Room code ${code} found`);
+      router.push(`/host/${code}`);
     },
-    [setRoomCode, toast],
+    [setRoomCode, toast, router],
   );
 
   return (

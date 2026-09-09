@@ -142,9 +142,10 @@ function ScannerContent({ onClose, onScan }: Omit<QrScannerProps, "open">) {
         {cameraState === "live" && (
           <video
             ref={videoRef}
-            className="h-full w-full object-cover"
-            muted
+            autoPlay
             playsInline
+            muted
+            className="h-full w-full object-cover"
           />
         )}
         <div className="pointer-events-none absolute inset-4 rounded-[var(--radius-xs)] border border-white/20" />
