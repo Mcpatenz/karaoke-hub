@@ -8,8 +8,8 @@ import RoomQRCode from "@/components/karaoke/RoomQRCode";
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const JOIN_URL = (code: string) =>
   typeof window !== "undefined"
-    ? `${window.location.origin}/join/${code}`
-    : `https://mcpatenzkaraoke.app/join/${code}`;
+    ? `${window.location.origin}/host/${code}`
+    : `https://karaoke-hub-eight.vercel.app/host/${code}`;
 
 interface WaitingScreenProps {
   roomCode: string;

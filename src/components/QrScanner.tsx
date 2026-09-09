@@ -22,7 +22,7 @@ export default function QrScanner({ open, onClose, onScan }: QrScannerProps) {
 }
 
 function extractRoomCode(text: string): string | null {
-  const urlMatch = text.match(/\/join\/([A-Za-z0-9]+)/);
+  const urlMatch = text.match(/\/(?:join|host)\/([A-Za-z0-9]+)/);
   if (urlMatch) return urlMatch[1];
   if (/^[A-Za-z0-9]{4,8}$/.test(text.trim())) return text.trim();
   return null;
