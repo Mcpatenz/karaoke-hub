@@ -66,7 +66,7 @@ function JoinSection() {
     <section
       id="join"
       aria-label="Host or join a karaoke room"
-      className="relative flex min-h-screen items-center overflow-hidden pb-24 pt-10 lg:pb-10"
+      className="relative flex min-h-[100dvh] items-center overflow-hidden pb-24 pt-10 lg:pb-10"
     >
       <StageBackground vignette particles={20} />
 
@@ -86,7 +86,7 @@ function JoinSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.5 }}
             transition={transition}
-            className="mt-3 text-4xl font-bold tracking-tight md:text-5xl"
+            className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl"
           >
             Sing. Play.{" "}
             <span className="bg-linear-to-r from-violet-400 via-fuchsia-400 to-blue-400 bg-clip-text text-transparent">
@@ -105,7 +105,7 @@ function JoinSection() {
           </motion.p>
         </div>
 
-        <div className="mx-auto mt-14 grid max-w-3xl gap-4 md:grid-cols-2">
+        <div className="mx-auto mt-10 max-w-3xl px-2 sm:mt-14 sm:px-0 md:grid md:grid-cols-2 md:gap-4">
           <motion.form
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}

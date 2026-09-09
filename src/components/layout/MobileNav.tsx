@@ -14,11 +14,11 @@ export default function MobileNav() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border-default bg-surface-base/95 backdrop-blur-md lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border-default bg-surface-base/95 backdrop-blur-md safe-area-bottom lg:hidden"
     >
       <ul className="grid grid-cols-5">
         {ITEMS.map(({ href, label, icon: Icon }) => (
-          <li key={href} className="min-h-[44px] min-w-[44px]">
+          <li key={href}>
             <Link
               href={href}
               className="flex min-h-[52px] flex-col items-center justify-center gap-0.5 text-text-tertiary transition-colors hover:text-text-primary focus-visible:outline-2 focus-visible:outline-accent"
@@ -28,7 +28,7 @@ export default function MobileNav() {
             </Link>
           </li>
         ))}
-        <li className="min-h-[44px] min-w-[44px]">
+        <li>
           <Link
             href="/room"
             aria-label="Open karaoke room"

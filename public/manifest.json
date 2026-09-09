@@ -1,0 +1,24 @@
+{
+  "name": "Mcpatenz Karaoke Hub",
+  "short_name": "Karaoke Hub",
+  "description": "Host a karaoke room, queue live songs, and sing with friends in real time.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#050509",
+  "theme_color": "#050509",
+  "categories": ["entertainment", "music"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "lang": "en",
+  "dir": "ltr",
+  "scope": "/",
+  "prefer_related_applications": false
+}

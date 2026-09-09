@@ -57,7 +57,7 @@ export default function WelcomeModal({ open, onClose }: WelcomeModalProps) {
 
   return (
     <Dialog open={open} onClose={onClose} aria-label="Welcome to Mcpatenz Karaoke Hub">
-      <div className="flex max-h-[calc(100vh-32px)] flex-col">
+      <div className="flex max-h-[calc(100dvh-32px)] flex-col">
         <div className="text-center pt-8 px-6">
           <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-[var(--radius-sm)] bg-accent shadow-[0_0_28px_var(--color-accent-glow)]">
             <Mic className="h-8 w-8 text-text-inverse" aria-hidden="true" />

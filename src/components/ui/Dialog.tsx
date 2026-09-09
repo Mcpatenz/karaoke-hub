@@ -82,7 +82,7 @@ export default function Dialog({ open, onClose, title, children, showClose = tru
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-[480px] max-h-[calc(100vh-32px)] overflow-hidden rounded-[var(--radius-sm)] border border-border-default bg-surface-muted shadow-2xl"
+            className="relative w-full max-w-[480px] max-h-[calc(100dvh-32px)] overflow-hidden rounded-[var(--radius-sm)] border border-border-default bg-surface-muted shadow-2xl"
           >
             {showClose && (
               <button

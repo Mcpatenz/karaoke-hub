@@ -94,7 +94,7 @@ export default function KaraokeHostRoom({ roomCode, hostName }: KaraokeHostRoomP
   const participantCount = room.guests.length + 1;
 
   return (
-    <div className="stage-bg relative flex h-screen flex-col overflow-hidden text-white">
+    <div className="stage-bg relative flex h-[100dvh] flex-col overflow-hidden text-white">
       <HostHeader
         roomCode={roomCode}
         participantCount={participantCount}
