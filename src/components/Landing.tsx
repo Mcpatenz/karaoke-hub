@@ -24,6 +24,8 @@ function JoinSection() {
     setHostName,
     setGuestName,
     setRoomCode,
+    setIsHost,
+    requestJoin,
   } = useRoomStore();
   const { toast } = useToast();
   const router = useRouter();
@@ -36,6 +38,7 @@ function JoinSection() {
     }
     const code = (hostName.replace(/\s+/g, "") || "KARAOKE").toUpperCase();
     setRoomCode(code);
+    setIsHost(true);
     toast("Room created successfully");
     router.push(`/host/${code}`);
   };
@@ -49,6 +52,13 @@ function JoinSection() {
       toast("Enter your singer name", "error");
       return;
     }
+    setIsHost(false);
+    requestJoin({
+      id: `g-${Math.random().toString(36).slice(2, 10)}`,
+      name: guestName.trim(),
+      isHost: false,
+    });
+    toast("Join request sent — waiting for host approval");
     router.push(`/host/${roomCode.trim().toUpperCase()}`);
   };
 
@@ -56,10 +66,18 @@ function JoinSection() {
     (code: string) => {
       setRoomCode(code);
       setScanOpen(false);
-      toast(`Room code ${code} found`);
+      if (guestName.trim()) {
+        setIsHost(false);
+        requestJoin({
+          id: `g-${Math.random().toString(36).slice(2, 10)}`,
+          name: guestName.trim(),
+          isHost: false,
+        });
+        toast("Join request sent — waiting for host approval");
+      }
       router.push(`/host/${code}`);
     },
-    [setRoomCode, toast, router],
+    [setRoomCode, guestName, setIsHost, requestJoin, toast, router],
   );
 
   return (

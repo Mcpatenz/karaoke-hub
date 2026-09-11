@@ -2,6 +2,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
+  AlertTriangle,
   ChevronDown,
   Gauge,
   Maximize,
@@ -87,6 +88,7 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
 
   const [ready, setReady] = useState(false);
   const [playState, setPlayState] = useState<PlayState>("buffering");
+  const [error, setError] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(song.duration ?? 0);
   const [volume, setVolume] = useState(70);
@@ -152,6 +154,11 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
           fs: 0,
         },
         events: {
+          onError: () => {
+            if (cancelled) return;
+            setError(true);
+            setReady(true);
+          },
           onReady: () => {
             if (cancelled) return;
             playerRef.current = player;
@@ -196,6 +203,7 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
       }
       playerRef.current = null;
       endedRef.current = false;
+      setError(false);
     };
   }, [song.videoId, dumpEnded]);
 
@@ -376,12 +384,33 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
       <div ref={hostRef} className="absolute inset-0" />
 
       {/* Loading spinner until the player signals ready */}
-      {!ready ? (
+      {!ready && !error ? (
         <div className="absolute inset-0 z-20 grid place-items-center bg-black">
           <div className="flex flex-col items-center gap-3">
             <span className="h-10 w-10 animate-spin rounded-full border-2 border-surface-strong border-t-accent" />
             <p className="text-sm text-text-tertiary">Loading karaoke video…</p>
           </div>
+        </div>
+      ) : null}
+
+      {/* Error overlay — video unavailable */}
+      {error ? (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/90 gap-4 px-6 text-center">
+          <AlertTriangle className="h-10 w-10 text-status-error" aria-hidden="true" />
+          <div>
+            <p className="text-base font-semibold text-white">Video Unavailable</p>
+            <p className="mt-1 text-sm text-text-tertiary">
+              This video cannot be played. It may have been removed or restricted.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={skipSong}
+            className="mt-2 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-surface-base transition-colors hover:bg-accent/80 focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <SkipForward className="h-4 w-4" aria-hidden="true" />
+            Skip Song
+          </button>
         </div>
       ) : null}
 
@@ -394,7 +423,7 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
 
       {/* Top info overlay */}
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/85 via-black/45 to-transparent p-5 pb-16 transition-all duration-300 ${
+        className={`pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/85 via-black/45 to-transparent p-3 pb-14 transition-all duration-300 sm:p-5 sm:pb-16 ${
           controlsVisible ? "opacity-100" : "opacity-0"
         }`}
       >
@@ -416,7 +445,7 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
           type="button"
           aria-label={playState === "ended" ? "Play again" : "Play"}
           onClick={togglePlay}
-          className={`absolute left-1/2 top-[46%] z-20 mb-4 grid h-20 w-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-sm transition-all hover:scale-105 hover:border-accent/60 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent ${
+          className={`absolute left-1/2 top-[46%] z-20 mb-4 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-sm transition-all hover:scale-105 hover:border-accent/60 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent sm:h-20 sm:w-20 ${
             controlsVisible ? "opacity-100" : "opacity-0"
           }`}
         >
@@ -471,7 +500,7 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
         </div>
 
         {/* Buttons row */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <CtlBtn label={playState === "playing" ? "Pause" : "Play"} onClick={togglePlay} primary>
             {playState === "playing" ? (
               <Pause className="h-5 w-5 fill-current" aria-hidden="true" />
@@ -479,17 +508,17 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
               <Play className="h-5 w-5 translate-x-0.5 fill-current" aria-hidden="true" />
             )}
           </CtlBtn>
-          <CtlBtn label="Replay 10 seconds" onClick={() => seekBy(-10)}>
+          <CtlBtn label="Replay 10 seconds" onClick={() => seekBy(-10)} className="max-sm:hidden">
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
           </CtlBtn>
-          <CtlBtn label="Forward 10 seconds" onClick={() => seekBy(10)}>
+          <CtlBtn label="Forward 10 seconds" onClick={() => seekBy(10)} className="max-sm:hidden">
             <RotateCw className="h-4 w-4" aria-hidden="true" />
           </CtlBtn>
           <CtlBtn label="Skip song" onClick={skipSong}>
             <SkipForward className="h-4 w-4" aria-hidden="true" />
           </CtlBtn>
 
-          <div className="ml-1 min-w-0 select-none text-xs tabular-nums text-white/90">
+          <div className="ml-1 min-w-0 whitespace-nowrap select-none text-xs tabular-nums text-white/90">
             {formatTime(activeTime)}
             <span className="mx-1 text-white/40">/</span>
             <span className="text-white/60">{formatTime(duration)}</span>
@@ -580,11 +609,13 @@ function CtlBtn({
   onClick,
   children,
   primary = false,
+  className = "",
 }: {
   label: string;
   onClick: () => void;
   children: React.ReactNode;
   primary?: boolean;
+  className?: string;
 }) {
   return (
     <button
@@ -592,11 +623,11 @@ function CtlBtn({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`grid h-10 w-10 place-items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
+      className={`grid h-10 w-10 min-h-[44px] min-w-[44px] place-items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
         primary
           ? "bg-white/10 text-white hover:bg-accent hover:text-text-inverse"
           : "text-white/80 hover:bg-white/10 hover:text-accent"
-      }`}
+      } ${className}`}
     >
       {children}
     </button>

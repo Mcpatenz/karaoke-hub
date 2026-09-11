@@ -76,7 +76,7 @@ function StaticStage({ song }: { song: QueueItem }) {
           ) : null}
         </div>
       </div>
-      <div className="relative mt-2 h-1 w-64 overflow-hidden rounded-full bg-surface-strong">
+      <div className="relative mt-2 h-1 w-full max-w-64 overflow-hidden rounded-full bg-surface-strong">
         <div
           className="h-full rounded-full bg-accent shadow-[0_0_12px_var(--color-accent-glow)]"
           style={{ width: `${progress}%` }}

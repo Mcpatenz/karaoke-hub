@@ -2,15 +2,18 @@
 
 import { useState, type RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ListMusic, Search, Settings, Play, Pause, SkipForward, Plus, Minus, Volume2, VolumeX } from "lucide-react";
+import { ListMusic, Search, Settings, Users, Play, Pause, SkipForward, Plus, Minus, Volume2, VolumeX } from "lucide-react";
+import { useRoomStore } from "@/stores/roomStore";
 import { useQueueStore, type QueueItem } from "@/stores/queueStore";
+import { useToast } from "@/components/ui/Toast";
 import type { Song } from "@/stores/searchStore";
 import type { VideoPlayerHandle } from "./ModernVideoPlayer";
 import QueuePanel from "./QueuePanel";
 import AddSongPanel from "./AddSongPanel";
 import SettingsPanel, { type HostSettings } from "./SettingsPanel";
+import GuestList from "./GuestList";
 
-export type SidebarTab = "queue" | "add" | "settings";
+export type SidebarTab = "queue" | "add" | "settings" | "guests";
 
 interface KaraokeSidebarProps {
   queueCount: number;
@@ -32,13 +35,20 @@ export default function KaraokeSidebar({
   isHost,
 }: KaraokeSidebarProps) {
   const [tab, setTab] = useState<SidebarTab>("queue");
-  const state = useQueueStore();
+  const queue = useQueueStore();
+  const room = useRoomStore();
 
   const handleAddSong = (song: Song): boolean => onAddSong(song);
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <SidebarTabs tab={tab} onTab={setTab} queueCount={queueCount} />
+      <SidebarTabs
+        tab={tab}
+        onTab={setTab}
+        queueCount={queueCount}
+        pendingCount={room.pendingGuests.length}
+        isHost={isHost}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         <AnimatePresence mode="wait">
@@ -66,12 +76,49 @@ export default function KaraokeSidebar({
             {tab === "settings" && (
               <SettingsPanel settings={settings} onChange={onSettingsChange} />
             )}
+            {tab === "guests" && (
+              <GuestPanel />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      <PlayerControls playerRef={playerRef} onSkip={state.skipCurrent} hasNowPlaying={!!state.nowPlaying} />
+      <PlayerControls playerRef={playerRef} onSkip={queue.skipCurrent} hasNowPlaying={!!queue.nowPlaying} />
     </div>
+  );
+}
+
+function GuestPanel() {
+  const room = useRoomStore();
+  const { toast } = useToast();
+
+  const handleApprove = (id: string) => {
+    const guest = room.pendingGuests.find((g) => g.id === id);
+    room.approveGuest(id);
+    if (guest) toast(`${guest.name} approved`);
+  };
+
+  const handleDeny = (id: string) => {
+    const guest = room.pendingGuests.find((g) => g.id === id);
+    room.denyGuest(id);
+    if (guest) toast(`${guest.name} denied`, "error");
+  };
+
+  const handleRemove = (id: string) => {
+    const guest = room.guests.find((g) => g.id === id);
+    room.removeGuest(id);
+    if (guest) toast(`${guest.name} removed`);
+  };
+
+  return (
+    <GuestList
+      guests={room.guests}
+      pendingGuests={room.pendingGuests}
+      isHost
+      onApprove={handleApprove}
+      onDeny={handleDeny}
+      onRemove={handleRemove}
+    />
   );
 }
 
@@ -79,10 +126,14 @@ function SidebarTabs({
   tab,
   onTab,
   queueCount,
+  pendingCount,
+  isHost,
 }: {
   tab: SidebarTab;
   onTab: (tab: SidebarTab) => void;
   queueCount: number;
+  pendingCount: number;
+  isHost: boolean;
 }) {
   const tabs: {
     id: SidebarTab;
@@ -92,11 +143,16 @@ function SidebarTabs({
   }[] = [
     { id: "queue", label: `Queue (${queueCount})`, icon: <ListMusic className="h-4 w-4" aria-hidden="true" /> },
     { id: "add", label: "Add Song", icon: <Search className="h-4 w-4" aria-hidden="true" /> },
+    ...(isHost
+      ? [{ id: "guests" as SidebarTab, label: `Guests`, icon: <Users className="h-4 w-4" aria-hidden="true" />, badge: pendingCount }]
+      : []),
     { id: "settings", label: "Settings", icon: <Settings className="h-4 w-4" aria-hidden="true" /> },
   ];
 
+  const cols = isHost ? "grid-cols-4" : "grid-cols-3";
+
   return (
-    <div className="grid grid-cols-3 gap-1 rounded-[var(--radius-sm)] border border-border-default bg-[#181818] p-1">
+    <div className={`grid ${cols} gap-1 rounded-[var(--radius-sm)] border border-border-default bg-[#181818] p-1`}>
       {tabs.map((t) => {
         const active = tab === t.id;
         return (
@@ -105,7 +161,7 @@ function SidebarTabs({
             type="button"
             onClick={() => onTab(t.id)}
             aria-pressed={active}
-            className={`flex h-11 min-h-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-xs)] px-2 text-xs font-semibold transition-all focus-visible:outline-2 focus-visible:outline-accent ${
+            className={`relative flex h-11 min-h-[44px] items-center justify-center gap-1.5 rounded-[var(--radius-xs)] px-2 text-xs font-semibold transition-all focus-visible:outline-2 focus-visible:outline-accent ${
               active
                 ? "border border-accent bg-accent/10 text-accent shadow-[0_0_16px_var(--color-accent-glow)]"
                 : "border border-transparent text-text-tertiary hover:bg-surface-raised hover:text-text-primary"
@@ -113,6 +169,11 @@ function SidebarTabs({
           >
             <span className={active ? "text-accent" : ""}>{t.icon}</span>
             <span className="truncate">{t.label}</span>
+            {t.badge != null && t.badge > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-status-error px-1 text-[9px] font-bold text-white">
+                {t.badge}
+              </span>
+            )}
           </button>
         );
       })}

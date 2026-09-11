@@ -33,30 +33,66 @@ export async function GET(request: Request) {
   const q = (searchParams.get("q") ?? "").trim();
   if (!q) return NextResponse.json({ videos: [] });
 
-  try {
-    const html = await fetch(
-      `https://www.youtube.com/results?search_query=${encodeURIComponent(`${q} karaoke`)}`,
-      {
-        headers: {
-          "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-          "accept-language": "en-US,en;q=0.9",
-          cookie: "CONSENT=YES+1; SOCS=CAI",
-        },
-        cache: "no-store",
-      },
-    );
-    if (!html.ok) {
-      return NextResponse.json({ videos: [] }, { status: html.status });
-    }
-    const text = await html.text();
-    const data = extractYtInitialData(text);
-    const videos = data ? extractVideos(data) : [];
+  let lastStatus = 0;
+  let videos: YoutubeVideoResult[] = [];
 
-    return NextResponse.json({ videos });
-  } catch {
-    return NextResponse.json({ videos: [] }, { status: 502 });
+  // Retry variants use different consent cookies to bypass consent walls that
+  // cloud/serverless IPs (e.g. Vercel/AWS) frequently hit.
+  const attemptCookies = [
+    "CONSENT=YES+1; SOCS=CAI",
+    "CONSENT=YES+cb.20240317-11-p0.en+FX+418; SOCS=CAISAiAD",
+    "CONSENT=YES+1",
+    "",
+  ];
+
+  for (const cookie of attemptCookies) {
+    try {
+      const html = await fetch(
+        `https://www.youtube.com/results?search_query=${encodeURIComponent(`${q} karaoke`)}&hl=en&gl=US`,
+        {
+          headers: {
+            "user-agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+            "accept-language": "en-US,en;q=0.9",
+            accepts:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            ...(cookie ? { cookie } : {}),
+          },
+          cache: "no-store",
+        },
+      );
+      lastStatus = html.status;
+      if (!html.ok) continue;
+
+      const text = await html.text();
+
+      // Detect a consent wall or CAPTCHA page and try the next variant.
+      if (
+        /consent\.youtube\.com|consent\.google\.com/i.test(text) ||
+        /captcha|recaptcha/i.test(text) ||
+        text.includes("ytInitialData") === false
+      ) {
+        continue;
+      }
+
+      const data = extractYtInitialData(text);
+      videos = data ? extractVideos(data) : [];
+      if (videos.length > 0) break;
+      continue;
+    } catch {
+      continue;
+    }
   }
+
+  if (videos.length > 0) {
+    return NextResponse.json({ videos });
+  }
+
+  // Distinguish "we got blocked" from "no results matched".
+  if (lastStatus === 0 || lastStatus >= 400) {
+    return NextResponse.json({ videos: [], error: "youtube_blocked" }, { status: 502 });
+  }
+  return NextResponse.json({ videos });
 }
 
 /** Pull the `var ytInitialData = {...};` object using a small brace matcher. */

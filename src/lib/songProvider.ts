@@ -150,6 +150,10 @@ class YouTubeSongProvider implements SongProvider {
     url.searchParams.set("q", `${q} karaoke`);
     url.searchParams.set("maxResults", "12");
     url.searchParams.set("relevanceLanguage", "en");
+    // Only return videos that can actually play inside our embedded player,
+    // otherwise YouTube reports "Video unavailable" on the stage.
+    url.searchParams.set("videoEmbeddable", "true");
+    url.searchParams.set("videoSyndicated", "true");
     url.searchParams.set("key", this.apiKey!);
 
     const res = await fetch(url.toString());
@@ -198,6 +202,19 @@ class YouTubeSongProvider implements SongProvider {
 
   async getTopPlayed(limit = 10): Promise<Song[]> {
     // Load real karaoke videos so the "Top Played" list plays actual videos.
+
+    // Prefer the official YouTube Data API when a key is configured (works on
+    // Vercel, unlike the key-less scraping route which gets blocked).
+    if (this.apiKey) {
+      try {
+        const apiSongs = await this.searchWithApiKey("popular karaoke songs");
+        if (apiSongs.length > 0) return apiSongs.slice(0, limit);
+      } catch {
+        /* fall through to the key-less route */
+      }
+    }
+
+    // Key-less fallback through our own route (parses YouTube's ytInitialData).
     try {
       const songs = await this.searchViaRoute("popular karaoke songs");
       if (songs.length > 0) {
