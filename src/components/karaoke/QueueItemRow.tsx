@@ -9,6 +9,7 @@ import { AlbumArt } from "./SongArt";
 interface QueueItemRowProps {
   item: QueueItem;
   index: number;
+  canControl?: boolean;
   onPlayNext: (id: string) => void;
   onMoveToTop: (id: string) => void;
   onRemove: (id: string, title: string) => void;
@@ -18,6 +19,7 @@ interface QueueItemRowProps {
 export default function QueueItemRow({
   item,
   index,
+  canControl = true,
   onPlayNext,
   onMoveToTop,
   onRemove,
@@ -44,12 +46,14 @@ export default function QueueItemRow({
       transition={{ duration: 0.2 }}
       className="group relative flex items-center gap-2 rounded-[var(--radius-xs)] border border-border-default bg-surface-raised px-2 py-2 hover:border-accent/40"
     >
-      <span
-        className="cursor-grab shrink-0 text-text-tertiary transition-colors group-hover:text-accent active:cursor-grabbing"
-        aria-hidden="true"
-      >
-        <GripVertical className="h-4 w-4" />
-      </span>
+      {canControl && (
+        <span
+          className="cursor-grab shrink-0 text-text-tertiary transition-colors group-hover:text-accent active:cursor-grabbing"
+          aria-hidden="true"
+        >
+          <GripVertical className="h-4 w-4" />
+        </span>
+      )}
 
       <span className="w-5 shrink-0 text-center font-mono text-xs text-text-tertiary">
         {String(index + 1).padStart(2, "0")}
@@ -65,33 +69,35 @@ export default function QueueItemRow({
         </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5">
-        <button
-          type="button"
-          onClick={() => onPlayNext(item.id)}
-          aria-label={`Play ${item.title} next`}
-          className="grid h-8 w-8 place-items-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-accent/10 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          <Play className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={() => onRemove(item.id, item.title)}
-          aria-label={`Remove ${item.title} from queue`}
-          className="grid h-8 w-8 place-items-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-status-error/10 hover:text-status-error focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-label={`More actions for ${item.title}`}
-          aria-expanded={menuOpen}
-          className="grid h-8 w-8 place-items-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-surface-strong hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          <MoreVertical className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
+      {canControl ? (
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => onPlayNext(item.id)}
+            aria-label={`Play ${item.title} next`}
+            className="grid h-8 w-8 place-items-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-accent/10 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <Play className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(item.id, item.title)}
+            aria-label={`Remove ${item.title} from queue`}
+            className="grid h-8 w-8 place-items-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-status-error/10 hover:text-status-error focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label={`More actions for ${item.title}`}
+            aria-expanded={menuOpen}
+            className="grid h-8 w-8 place-items-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-surface-strong hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <MoreVertical className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
 
       <AnimatePresence>
         {menuOpen && (

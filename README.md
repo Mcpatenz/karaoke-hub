@@ -1,62 +1,49 @@
 # Karaoke Hub 🎤
 
-A premium, animated karaoke entertainment landing website built with **React 19**, **Vite 8**, **Tailwind CSS v4**, and **Framer Motion**.
+A real-time karaoke room where a host starts a session and guests join to queue songs and sing along. Built with **Next.js 15**, **React 19**, **Tailwind CSS v4**, **Zustand**, and **Framer Motion**.
 
-## ✨ Features
+## ✨ How rooms work
 
-- **Cinematic scroll** — parallax hero, animated gradient orbs & rotating rings
-- **Interactive & responsive** — mobile menu, hover effects, live interactive song search/filter
-- **Motion & animation** — scroll reveal, staggered entrances, floating elements, marquee ticker, progress rings
-- **SEO optimized** — meta tags, Open Graph, Twitter cards, semantic HTML
-- **Modern SaaS-premium aesthetic** — dark theme, glassmorphism, gradient accents, film-grain overlay
-
-## 🧩 Sections
-
-1. **Hero** — cinematic landing with floating feature cards, animated CTA, live stats
-2. **Marquee** — scrolling song ticker
-3. **Features** — bento-grid with hover glow
-4. **Song Library** — interactive search + genre filter + favorites
-5. **Venue Finder** — filterable venue cards
-6. **Live Community** — interactive chat + virtual gifts demo
-7. **Badges & Rewards** — achievement badges + live leaderboard
-8. **CTA** — animated call-to-action panel
-9. **Footer** — full site navigation
+- **Host** starts a room from the landing page. The server issues a host token (stored per-tab) that authenticates all host-only actions.
+- **Joining requires approval.** Guests submit a join request with their name; the host approves or denies it from the Guests tab. The guest's device updates live over Server-Sent Events (SSE) the moment the host decides.
+- **Role permissions:**
+  - **Host** — full control: approve/deny/remove guests, play-next, reorder, remove, skip, clear the queue, and change room settings.
+  - **Guest** — can **add songs only**. Queue controls (reorder, play-next, remove, skip, clear) are hidden from guests and rejected by the server.
+  - Host can open the room (`Room Locker` off) to auto-approve joiners, or keep it locked (default) to review every request.
+- **Queue & room state sync live** across every connected device via the realtime stream; song adds and queue changes by the host are broadcast to all guests.
+- The host can also end the session, which closes the room for everyone.
 
 ## 🚀 Getting Started
 
 ```bash
 npm install
-npm run dev      # start dev server at http://localhost:5173
-npm run build    # production build
-npm run preview  # preview production build
+npm run dev       # start dev server at http://localhost:3000
+npm run build     # production build
+npm run start     # serve the production build (REQUIRED for realtime)
+npm run lint      # oxlint
 ```
+
+> **Realtime in production:** rooms live in an in-memory registry on a single Node process, streamed over SSE. Use `npm run start` (a persistent Node server) — plain serverless deploys without a persistent runtime won't keep rooms or SSE connections alive.
 
 ## 🛠 Tech Stack
 
-- **React 19** + TypeScript
-- **Vite 8** build tool
-- **Tailwind CSS v4** (via `@tailwindcss/vite`)
-- **Framer Motion** for animations
-- **Lucide React** icons
+- **Next.js 15** (App Router) + React 19 + TypeScript
+- **Tailwind CSS v4** (CSS-first config in `globals.css`)
+- **Zustand** for client state (room, queue, player, search)
+- **Framer Motion** animations + **Lucide React** icons
+- **SSE + REST** for the realtime backend (`src/lib/rooms.ts`, `src/app/api/rooms/**`)
+- YouTube search via API key or key-less proxy (`/api/youtube/search`)
 
-## 📂 Project Structure
+## 📂 Key structure
 
 ```
 src/
-├── App.tsx                  # Composes all sections
-├── main.tsx                 # App entry
-├── index.css                # Tailwind + design tokens + keyframes
-└── components/
-    ├── Navbar.tsx           # Scroll-aware sticky nav + mobile menu
-    ├── Hero.tsx             # Cinematic hero
-    ├── Marquee.tsx          # Song ticker
-    ├── Features.tsx         # Feature grid
-    ├── SongLibrary.tsx      # Interactive song search/filter
-    ├── Venues.tsx           # Filterable venues
-    ├── Community.tsx        # Live chat + gifts
-    ├── Rewards.tsx          # Badges + leaderboard
-    ├── CTA.tsx              # Call-to-action
-    ├── Footer.tsx           # Site footer
-    ├── SEO.tsx              # Dynamic meta tags
-    └── primitives.tsx       # Shared animation primitives
+├── app/api/rooms/            # Realtime backend: create, join, stream (SSE), actions
+├── app/host/[code]/          # Live room page
+├── components/karaoke/       # Host room, queue, add-song, guest list, settings, player
+├── hooks/useRoomRealtime.ts  # SSE → Zustand sync for the live room
+├── lib/rooms.ts              # Server-side in-memory room registry + event broadcast
+├── lib/roomApi.ts            # Client API + SSE subscription + identity persistence
+├── lib/roomSettings.ts       # Shared HostSettings + defaults
+└── stores/                   # Zustand stores (room, queue, player, search)
 ```

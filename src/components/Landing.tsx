@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useRoomStore } from "@/stores/roomStore";
+import { roomApi } from "@/lib/roomApi";
 import QrScanner from "@/components/QrScanner";
 import { StageBackground } from "@/components/karaoke/StageBackground";
 import WelcomeModal from "@/components/WelcomeModal";
@@ -25,25 +26,34 @@ function JoinSection() {
     setGuestName,
     setRoomCode,
     setIsHost,
-    requestJoin,
+    setHostToken,
+    setGuestId,
+    setGuestStatus,
   } = useRoomStore();
   const { toast } = useToast();
   const router = useRouter();
   const [scanOpen, setScanOpen] = useState(false);
 
-  const hostRoom = () => {
+  const hostRoom = async () => {
     if (!hostName.trim()) {
       toast("Enter a DJ name to start the party", "error");
       return;
     }
-    const code = (hostName.replace(/\s+/g, "") || "KARAOKE").toUpperCase();
-    setRoomCode(code);
+    const res = await roomApi.createRoom(hostName.trim());
+    if (!res.ok || !res.code || !res.hostToken) {
+      toast(res.error ?? "Could not create room", "error");
+      return;
+    }
+    roomApi.saveHostIdentity(res.code, res.hostToken);
+    setRoomCode(res.code);
+    setHostToken(res.hostToken);
     setIsHost(true);
+    setGuestStatus("approved");
     toast("Room created successfully");
-    router.push(`/host/${code}`);
+    router.push(`/host/${res.code}`);
   };
 
-  const joinRoom = () => {
+  const joinRoom = async () => {
     if (!roomCode.trim()) {
       toast("Enter a room code to join", "error");
       return;
@@ -52,32 +62,50 @@ function JoinSection() {
       toast("Enter your singer name", "error");
       return;
     }
+    const code = roomCode.trim().toUpperCase();
+    const guestId = `g-${Math.random().toString(36).slice(2, 10)}`;
+    const res = await roomApi.joinRoom(code, guestId, guestName.trim());
+    if (!res.ok || !res.guestStatus) {
+      toast(res.error ?? "Room not found", "error");
+      return;
+    }
+    roomApi.saveGuestIdentity(code, guestId, guestName.trim());
+    setRoomCode(code);
+    setGuestId(guestId);
     setIsHost(false);
-    requestJoin({
-      id: `g-${Math.random().toString(36).slice(2, 10)}`,
-      name: guestName.trim(),
-      isHost: false,
-    });
-    toast("Join request sent — waiting for host approval");
-    router.push(`/host/${roomCode.trim().toUpperCase()}`);
+    setGuestStatus(res.guestStatus);
+    toast(
+      res.guestStatus === "pending"
+        ? "Join request sent — waiting for host approval"
+        : "Joined room — you can add songs",
+    );
+    router.push(`/host/${code}`);
   };
 
   const handleScannedCode = useCallback(
-    (code: string) => {
+    async (code: string) => {
       setRoomCode(code);
       setScanOpen(false);
       if (guestName.trim()) {
+        const guestId = `g-${Math.random().toString(36).slice(2, 10)}`;
+        const res = await roomApi.joinRoom(code, guestId, guestName.trim());
+        if (!res.ok || !res.guestStatus) {
+          toast(res.error ?? "Room not found", "error");
+          return;
+        }
+        roomApi.saveGuestIdentity(code, guestId, guestName.trim());
+        setGuestId(guestId);
         setIsHost(false);
-        requestJoin({
-          id: `g-${Math.random().toString(36).slice(2, 10)}`,
-          name: guestName.trim(),
-          isHost: false,
-        });
-        toast("Join request sent — waiting for host approval");
+        setGuestStatus(res.guestStatus);
+        toast(
+          res.guestStatus === "pending"
+            ? "Join request sent — waiting for host approval"
+            : "Joined room — you can add songs",
+        );
       }
       router.push(`/host/${code}`);
     },
-    [setRoomCode, guestName, setIsHost, requestJoin, toast, router],
+    [setRoomCode, guestName, setGuestId, setIsHost, setGuestStatus, toast, router],
   );
 
   return (

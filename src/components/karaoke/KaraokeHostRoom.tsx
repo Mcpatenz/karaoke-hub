@@ -1,67 +1,58 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { LogOut, Mic, Monitor, Users, Clock, XCircle } from "lucide-react";
 import { useRoomStore } from "@/stores/roomStore";
 import { useQueueStore, type QueueItem } from "@/stores/queueStore";
 import type { Song } from "@/stores/searchStore";
+import { roomApi } from "@/lib/roomApi";
+import { useRoomRealtime } from "@/hooks/useRoomRealtime";
 import { useToast } from "@/components/ui/Toast";
 import WaitingScreen from "@/components/karaoke/WaitingScreen";
 import { NowPlayingStage } from "@/components/karaoke/NowPlayingStage";
 import KaraokeSidebar from "@/components/karaoke/KaraokeSidebar";
-import { DEFAULT_SETTINGS, type HostSettings } from "@/components/karaoke/SettingsPanel";
+import type { HostSettings } from "@/lib/roomSettings";
 import type { VideoPlayerHandle } from "@/components/karaoke/ModernVideoPlayer";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 interface KaraokeHostRoomProps {
   roomCode: string;
-  hostName: string;
 }
 
-export default function KaraokeHostRoom({ roomCode, hostName }: KaraokeHostRoomProps) {
+export default function KaraokeHostRoom({ roomCode }: KaraokeHostRoomProps) {
   const { toast } = useToast();
   const room = useRoomStore();
   const queue = useQueueStore();
-  const [settings, setSettings] = useState<HostSettings>(DEFAULT_SETTINGS);
   const playerRef = useRef<VideoPlayerHandle | null>(null);
-  const seededRef = useRef(false);
 
-  const { isHost, guestStatus } = room;
+  useRoomRealtime(roomCode);
+
+  const { isHost, guestStatus, settings, hostToken, guestId } = room;
   const queueCount = queue.upcoming.length;
 
-  useEffect(() => {
-    if (!isHost || seededRef.current) return;
-    seededRef.current = true;
-    const mocks = [
-      { id: "g-seed-1", name: "Ava", isHost: false },
-      { id: "g-seed-2", name: "Leo", isHost: false },
-      { id: "g-seed-3", name: "Mia", isHost: false },
-    ];
-    mocks.forEach((g) => room.addGuest(g));
-  }, [isHost]);
-
-  const handleSettingsChange = (next: HostSettings) => {
-    setSettings(next);
-    room.setRequiresApproval(!next.roomOpen);
-    toast("Settings updated");
+  const handleSettingsChange = async (next: HostSettings) => {
+    if (!isHost || !hostToken) return;
+    const ok = await roomApi.updateSettings(roomCode, hostToken, next);
+    if (ok) toast("Settings updated");
+    else toast("Failed to update settings", "error");
   };
 
   const handleAddSong = (song: Song): boolean => {
+    const addedBy = isHost ? room.hostName : room.guestName;
     const normalized = song.title.trim().toLowerCase();
     const inQueue = [queue.nowPlaying, ...queue.upcoming]
       .filter((i): i is QueueItem => i !== null)
       .some((i) => i.title.toLowerCase() === normalized);
 
-    if (settings.allowDuplicates === false && inQueue) {
+    if (!settings.allowDuplicates && inQueue) {
       toast(`"${song.title}" is already in the queue`, "error");
       return false;
     }
 
-    const addedBy = isHost ? hostName : room.guestName;
-    if (settings.guestQueueLimit > 0) {
+    if (!isHost && settings.guestQueueLimit > 0) {
       const count =
         (queue.nowPlaying?.addedBy === addedBy ? 1 : 0) +
         queue.upcoming.filter((i) => i.addedBy === addedBy).length;
@@ -84,8 +75,15 @@ export default function KaraokeHostRoom({ roomCode, hostName }: KaraokeHostRoomP
       addedBy,
     };
 
-    queue.addToQueue(item);
-    toast(`"${song.title}" added to queue (${queue.upcoming.length + 1} queued)`);
+    void (async () => {
+      const res = await roomApi.addSong(
+        roomCode,
+        item,
+        isHost ? { hostToken: hostToken ?? undefined } : { guestId: guestId ?? undefined },
+      );
+      if (res.ok) toast(`"${song.title}" added to queue`);
+      else toast(res.error ?? "Could not add song", "error");
+    })();
 
     return true;
   };
@@ -94,9 +92,20 @@ export default function KaraokeHostRoom({ roomCode, hostName }: KaraokeHostRoomP
     void item;
   };
 
+  const handleEndSession = async () => {
+    if (isHost && hostToken) {
+      await roomApi.endRoom(roomCode, hostToken);
+      roomApi.clearHostIdentity(roomCode);
+    } else if (guestId) {
+      await roomApi.leaveRoom(roomCode, guestId);
+      roomApi.clearGuestIdentity(roomCode);
+    }
+    useRoomStore.getState().reset();
+  };
+
   const participantCount = room.guests.length + 1;
 
-  if (!isHost && guestStatus === "pending") {
+  if (!isHost && (guestStatus === "pending" || guestStatus === "idle")) {
     return <GuestWaitingScreen roomCode={roomCode} guestName={room.guestName} />;
   }
 
@@ -110,7 +119,7 @@ export default function KaraokeHostRoom({ roomCode, hostName }: KaraokeHostRoomP
         roomCode={roomCode}
         participantCount={participantCount}
         isHost={isHost}
-        onEndSession={() => {}}
+        onEndSession={handleEndSession}
       />
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col md:flex-row">
@@ -131,7 +140,9 @@ export default function KaraokeHostRoom({ roomCode, hostName }: KaraokeHostRoomP
                 song={queue.nowPlaying}
                 playerRef={playerRef}
                 onEnded={() => {
-                  if (settings.autoplayNext) queue.completeCurrent();
+                  if (isHost && settings.autoplayNext && hostToken) {
+                    void roomApi.queueControl(roomCode, hostToken, "complete");
+                  }
                 }}
               />
             ) : (
@@ -146,6 +157,7 @@ export default function KaraokeHostRoom({ roomCode, hostName }: KaraokeHostRoomP
           className="flex h-[40dvh] md:h-auto min-h-0 w-full shrink-0 flex-col overflow-hidden md:overflow-y-auto border-t md:border-t-0 md:border-l border-[#262636] bg-surface-base/40 p-4 backdrop-blur-2xl md:max-w-[320px] lg:max-w-[360px]"
         >
           <KaraokeSidebar
+            roomCode={roomCode}
             queueCount={queueCount}
             settings={settings}
             onSettingsChange={handleSettingsChange}

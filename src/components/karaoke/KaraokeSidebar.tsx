@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ListMusic, Search, Settings, Users, Play, Pause, SkipForward, Plus, Minus, Volume2, VolumeX } from "lucide-react";
 import { useRoomStore } from "@/stores/roomStore";
 import { useQueueStore, type QueueItem } from "@/stores/queueStore";
+import { roomApi } from "@/lib/roomApi";
 import { useToast } from "@/components/ui/Toast";
 import type { Song } from "@/stores/searchStore";
 import type { VideoPlayerHandle } from "./ModernVideoPlayer";
@@ -16,6 +17,7 @@ import GuestList from "./GuestList";
 export type SidebarTab = "queue" | "add" | "settings" | "guests";
 
 interface KaraokeSidebarProps {
+  roomCode: string;
   queueCount: number;
   settings: HostSettings;
   onSettingsChange: (s: HostSettings) => void;
@@ -26,6 +28,7 @@ interface KaraokeSidebarProps {
 }
 
 export default function KaraokeSidebar({
+  roomCode,
   queueCount,
   settings,
   onSettingsChange,
@@ -61,6 +64,7 @@ export default function KaraokeSidebar({
           >
             {tab === "queue" && (
               <QueuePanel
+                roomCode={roomCode}
                 isHost={isHost}
                 onAddSong={() => setTab("add")}
                 onViewSong={onViewSong}
@@ -77,37 +81,52 @@ export default function KaraokeSidebar({
               <SettingsPanel settings={settings} onChange={onSettingsChange} />
             )}
             {tab === "guests" && (
-              <GuestPanel />
+              <GuestPanel roomCode={roomCode} />
             )}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      <PlayerControls playerRef={playerRef} onSkip={queue.skipCurrent} hasNowPlaying={!!queue.nowPlaying} />
+      {isHost && (
+        <PlayerControls
+          playerRef={playerRef}
+          onSkip={() => {
+            const st = useRoomStore.getState();
+            if (st.hostToken) void roomApi.queueControl(roomCode, st.hostToken, "skip");
+          }}
+          hasNowPlaying={!!queue.nowPlaying}
+        />
+      )}
     </div>
   );
 }
 
-function GuestPanel() {
+function GuestPanel({ roomCode }: { roomCode: string }) {
   const room = useRoomStore();
   const { toast } = useToast();
 
-  const handleApprove = (id: string) => {
+  const handleApprove = async (id: string) => {
     const guest = room.pendingGuests.find((g) => g.id === id);
-    room.approveGuest(id);
-    if (guest) toast(`${guest.name} approved`);
+    if (!room.hostToken) return;
+    const ok = await roomApi.approveGuest(roomCode, room.hostToken, id);
+    if (ok) toast(guest ? `${guest.name} approved` : "Guest approved");
+    else toast("Could not approve request", "error");
   };
 
-  const handleDeny = (id: string) => {
+  const handleDeny = async (id: string) => {
     const guest = room.pendingGuests.find((g) => g.id === id);
-    room.denyGuest(id);
-    if (guest) toast(`${guest.name} denied`, "error");
+    if (!room.hostToken) return;
+    const ok = await roomApi.denyGuest(roomCode, room.hostToken, id);
+    if (ok) toast(guest ? `${guest.name} denied` : "Request denied", "error");
+    else toast("Could not deny request", "error");
   };
 
-  const handleRemove = (id: string) => {
+  const handleRemove = async (id: string) => {
     const guest = room.guests.find((g) => g.id === id);
-    room.removeGuest(id);
-    if (guest) toast(`${guest.name} removed`);
+    if (!room.hostToken) return;
+    const ok = await roomApi.removeGuest(roomCode, room.hostToken, id);
+    if (ok) toast(guest ? `${guest.name} removed` : "Guest removed");
+    else toast("Could not remove guest", "error");
   };
 
   return (
@@ -146,10 +165,12 @@ function SidebarTabs({
     ...(isHost
       ? [{ id: "guests" as SidebarTab, label: `Guests`, icon: <Users className="h-4 w-4" aria-hidden="true" />, badge: pendingCount }]
       : []),
-    { id: "settings", label: "Settings", icon: <Settings className="h-4 w-4" aria-hidden="true" /> },
+    ...(isHost
+      ? [{ id: "settings" as SidebarTab, label: "Settings", icon: <Settings className="h-4 w-4" aria-hidden="true" /> }]
+      : []),
   ];
 
-  const cols = isHost ? "grid-cols-4" : "grid-cols-3";
+  const cols = isHost ? "grid-cols-4" : "grid-cols-2";
 
   return (
     <div className={`grid ${cols} gap-1 rounded-[var(--radius-sm)] border border-border-default bg-[#181818] p-1`}>

@@ -4,36 +4,46 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Trash2 } from "lucide-react";
 import { useQueueStore, type QueueItem } from "@/stores/queueStore";
+import { useRoomStore } from "@/stores/roomStore";
+import { roomApi } from "@/lib/roomApi";
 import { useToast } from "@/components/ui/Toast";
 import QueueItemRow, { EmptyQueue } from "./QueueItemRow";
 
 interface QueuePanelProps {
+  roomCode: string;
   onAddSong: () => void;
   onViewSong: (item: QueueItem) => void;
   isHost: boolean;
 }
 
-export default function QueuePanel({ onAddSong, onViewSong, isHost }: QueuePanelProps) {
-  const { upcoming, moveToPosition, playNext, removeFromQueue, clearQueue } = useQueueStore();
+export default function QueuePanel({ roomCode, onAddSong, onViewSong, isHost }: QueuePanelProps) {
+  const { upcoming } = useQueueStore();
   const { toast } = useToast();
   const [confirmClear, setConfirmClear] = useState(false);
 
+  const control = (control: string, payload: { id?: string; toIndex?: number } = {}) => {
+    const st = useRoomStore.getState();
+    if (!st.hostToken || !isHost) return;
+    void roomApi.queueControl(roomCode, st.hostToken, control, payload);
+  };
+
   const handleRemove = (id: string, title: string) => {
-    removeFromQueue(id);
+    control("remove", { id });
     toast(`${title} removed from queue`);
   };
 
   const handlePlayNext = (id: string) => {
     const item = upcoming.find((i) => i.id === id);
     if (!item) return;
-    playNext(id);
+    control("playNext", { id });
     toast(`Playing: ${item.title}`);
   };
 
   const handleMoveToTop = (id: string) => {
-    moveToPosition(id, 0);
     const item = upcoming.find((i) => i.id === id);
-    if (item) toast(`Moved "${item.title}" to top`);
+    if (!item) return;
+    control("moveToPosition", { id, toIndex: 0 });
+    toast(`Moved "${item.title}" to top`);
   };
 
   const queueCount = upcoming.length;
@@ -73,6 +83,7 @@ export default function QueuePanel({ onAddSong, onViewSong, isHost }: QueuePanel
                   key={item.id}
                   item={item}
                   index={idx}
+                  canControl={isHost}
                   onPlayNext={handlePlayNext}
                   onMoveToTop={handleMoveToTop}
                   onRemove={handleRemove}
@@ -118,7 +129,7 @@ export default function QueuePanel({ onAddSong, onViewSong, isHost }: QueuePanel
                 <button
                   type="button"
                   onClick={() => {
-                    clearQueue();
+                    control("clear");
                     setConfirmClear(false);
                     toast("Queue cleared");
                   }}

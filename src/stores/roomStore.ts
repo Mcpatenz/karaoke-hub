@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_SETTINGS, type HostSettings } from "@/lib/roomSettings";
 
 export interface Guest {
   id: string;
@@ -19,10 +20,25 @@ interface RoomState {
   isHost: boolean;
   guestStatus: GuestStatus;
   maxGuests: number;
+  hostToken: string | null;
+  guestId: string | null;
+  settings: HostSettings;
   setRoomCode: (code: string) => void;
   setHostName: (name: string) => void;
   setGuestName: (name: string) => void;
   setIsHost: (isHost: boolean) => void;
+  setHostToken: (token: string | null) => void;
+  setGuestId: (id: string | null) => void;
+  setGuestStatus: (status: GuestStatus) => void;
+  applySnapshot: (snap: {
+    roomCode: string;
+    hostName: string;
+    guests: Guest[];
+    pendingGuests: Guest[];
+    settings: HostSettings;
+    isLocked: boolean;
+    guestStatus: GuestStatus;
+  }) => void;
   addGuest: (guest: Guest) => void;
   removeGuest: (id: string) => void;
   requestJoin: (guest: Guest) => void;
@@ -44,10 +60,18 @@ export const useRoomStore = create<RoomState>((set) => ({
   isHost: false,
   guestStatus: "idle",
   maxGuests: 50,
+  hostToken: null,
+  guestId: null,
+  settings: { ...DEFAULT_SETTINGS },
   setRoomCode: (roomCode) => set({ roomCode }),
   setHostName: (hostName) => set({ hostName }),
   setGuestName: (guestName) => set({ guestName }),
   setIsHost: (isHost) => set({ isHost }),
+  setHostToken: (hostToken) => set({ hostToken }),
+  setGuestId: (guestId) => set({ guestId }),
+  setGuestStatus: (guestStatus) => set({ guestStatus }),
+  applySnapshot: ({ roomCode, hostName, guests, pendingGuests, settings, isLocked, guestStatus }) =>
+    set({ roomCode, hostName, guests, pendingGuests, settings, isLocked, guestStatus }),
   addGuest: (guest) => set((s) => ({ guests: [...s.guests, guest] })),
   removeGuest: (id) =>
     set((s) => ({
@@ -92,5 +116,8 @@ export const useRoomStore = create<RoomState>((set) => ({
       requiresApproval: true,
       isHost: false,
       guestStatus: "idle",
+      hostToken: null,
+      guestId: null,
+      settings: { ...DEFAULT_SETTINGS },
     }),
 }));

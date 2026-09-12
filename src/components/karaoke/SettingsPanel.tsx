@@ -1,32 +1,8 @@
 "use client";
 
-export interface HostSettings {
-  allowGuestControl: boolean;
-  guestQueueLimit: number;
-  enableScoring: boolean;
-  allowDuplicates: boolean;
-  autoplayNext: boolean;
-  roomOpen: boolean;
-  cheering: boolean;
-  phoneMicToSpeaker: boolean;
-  hearVoice: boolean;
-  tvRemoteMode: boolean;
-  showLyrics: boolean;
-}
+import { DEFAULT_SETTINGS, type HostSettings } from "@/lib/roomSettings";
 
-export const DEFAULT_SETTINGS: HostSettings = {
-  allowGuestControl: true,
-  guestQueueLimit: 10,
-  enableScoring: true,
-  allowDuplicates: true,
-  autoplayNext: true,
-  roomOpen: true,
-  cheering: true,
-  phoneMicToSpeaker: true,
-  hearVoice: false,
-  tvRemoteMode: false,
-  showLyrics: true,
-};
+export { DEFAULT_SETTINGS, type HostSettings };
 
 interface SettingsPanelProps {
   settings: HostSettings;
