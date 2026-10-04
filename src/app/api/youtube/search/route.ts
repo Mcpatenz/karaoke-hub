@@ -1,6 +1,10 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export interface YoutubeVideoResult {
   videoId: string;
@@ -37,24 +41,22 @@ export async function GET(request: Request) {
   if (!q) return NextResponse.json({ videos: [], source: "empty" });
 
   const apiKey = readApiKey();
+  let apiError: string | null = null;
 
   if (apiKey) {
-    // A Data API search costs 100 quota units, so identical queries are served
-    // from a short-lived cache instead of billing every page load.
+    // A Data API search costs 100 of the 10,000 units/day, so identical queries
+    // are served from the on-disk cache instead of billing every page load.
     const cached = readCache(q);
     if (cached) return NextResponse.json({ videos: cached, source: "api", cached: true });
 
     try {
-      const videos = await searchWithApi(q, apiKey);
+      const videos = await searchOnce(q, apiKey);
       writeCache(q, videos);
       return NextResponse.json({ videos, source: "api" });
     } catch (err) {
-      // Surface the real reason (bad key, quota, network) instead of quietly
-      // returning nothing, which is indistinguishable from "no matches".
-      return NextResponse.json(
-        { videos: [], source: "api", error: describeApiError(err) },
-        { status: 502 },
-      );
+      // An exhausted quota or a transient failure must not kill search: fall
+      // through to the scraper and only surface the API problem if that fails.
+      apiError = describeApiError(err);
     }
   }
 
@@ -110,7 +112,16 @@ export async function GET(request: Request) {
   }
 
   if (videos.length > 0) {
-    return NextResponse.json({ videos, source: "scrape" });
+    return NextResponse.json({
+      videos,
+      source: "scrape",
+      warning: apiError ?? undefined,
+    });
+  }
+
+  // Report the API failure when it is the more useful explanation.
+  if (apiError) {
+    return NextResponse.json({ videos: [], source: "api", error: apiError }, { status: 502 });
   }
 
   // Distinguish "we got blocked" from "no results matched".
@@ -132,26 +143,84 @@ function readApiKey(): string {
   return raw.trim().replace(/^["']|["']$/g, "");
 }
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const CACHE_MAX = 60;
-const searchCache = new Map<string, { at: number; videos: YoutubeVideoResult[] }>();
+/**
+ * Two-tier result cache. YouTube search costs 100 quota units per call and the
+ * default project allowance is only 10,000/day, so results are kept for 12 hours
+ * on disk (surviving dev-server restarts) as well as in memory.
+ */
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const CACHE_MAX = 300;
+
+type CacheEntry = { at: number; videos: YoutubeVideoResult[] };
+const memoryCache = new Map<string, CacheEntry>();
+const inFlight = new Map<string, Promise<YoutubeVideoResult[]>>();
+let diskCache: Record<string, CacheEntry> | null = null;
+
+function cacheFile(): string {
+  const dir = process.env.YOUTUBE_CACHE_DIR ?? join(process.cwd(), ".cache");
+  return join(dir, "youtube-search.json");
+}
+
+function loadDiskCache(): Record<string, CacheEntry> {
+  if (diskCache) return diskCache;
+  try {
+    diskCache = JSON.parse(readFileSync(cacheFile(), "utf8")) as Record<string, CacheEntry>;
+  } catch {
+    // No cache yet, or the filesystem is read-only (serverless): memory only.
+    diskCache = {};
+  }
+  return diskCache;
+}
 
 function readCache(q: string): YoutubeVideoResult[] | undefined {
-  const hit = searchCache.get(q.toLowerCase());
+  const key = q.trim().toLowerCase();
+  const hit = memoryCache.get(key) ?? loadDiskCache()[key];
   if (!hit) return undefined;
   if (Date.now() - hit.at > CACHE_TTL_MS) {
-    searchCache.delete(q.toLowerCase());
+    memoryCache.delete(key);
+    delete loadDiskCache()[key];
     return undefined;
   }
+  memoryCache.set(key, hit);
   return hit.videos;
 }
 
 function writeCache(q: string, videos: YoutubeVideoResult[]): void {
-  if (searchCache.size >= CACHE_MAX) {
-    const oldest = searchCache.keys().next().value;
-    if (oldest !== undefined) searchCache.delete(oldest);
+  const key = q.trim().toLowerCase();
+  const entry: CacheEntry = { at: Date.now(), videos };
+  memoryCache.set(key, entry);
+
+  const store = loadDiskCache();
+  store[key] = entry;
+  const keys = Object.keys(store);
+  if (keys.length > CACHE_MAX) {
+    const stale = keys
+      .sort((a, b) => store[a].at - store[b].at)
+      .slice(0, keys.length - CACHE_MAX);
+    for (const k of stale) delete store[k];
   }
-  searchCache.set(q.toLowerCase(), { at: Date.now(), videos });
+
+  try {
+    mkdirSync(dirname(cacheFile()), { recursive: true });
+    writeFileSync(cacheFile(), JSON.stringify(store));
+  } catch {
+    try {
+      const fallback = join(tmpdir(), "karaoke-hub-youtube-search.json");
+      writeFileSync(fallback, JSON.stringify(store));
+    } catch {
+      /* memory cache still serves this process */
+    }
+  }
+}
+
+/** Collapses simultaneous identical queries into one billed API call. */
+function searchOnce(q: string, apiKey: string): Promise<YoutubeVideoResult[]> {
+  const key = q.trim().toLowerCase();
+  const running = inFlight.get(key);
+  if (running) return running;
+  const pending = searchWithApi(q, apiKey).finally(() => inFlight.delete(key));
+  inFlight.set(key, pending);
+  return pending;
 }
 
 /** The Data API returns HTML-escaped titles ("It&#39;s", "&amp;"). */

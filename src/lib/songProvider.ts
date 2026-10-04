@@ -40,12 +40,7 @@ export class SongSearchError extends Error {
  * "top karaoke hits" returns medleys and unknown channels, so the list is built
  * from a few well-known titles that reliably have real karaoke versions.
  */
-const TOP_PLAYED_SEEDS = [
-  "Bohemian Rhapsody Queen",
-  "Dancing Queen ABBA",
-  "My Way Frank Sinatra",
-  "I Will Always Love You Whitney Houston",
-];
+const TOP_PLAYED_SEEDS = ["Bohemian Rhapsody Queen", "Dancing Queen ABBA"];
 
 /** Results are cached briefly so reopening the panel does not re-bill quota. */
 const TOP_PLAYED_TTL_MS = 5 * 60 * 1000;
