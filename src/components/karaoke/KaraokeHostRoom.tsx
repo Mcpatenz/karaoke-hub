@@ -44,11 +44,16 @@ export default function KaraokeHostRoom({ roomCode }: KaraokeHostRoomProps) {
    *  the first song from the Next button. */
   const advanceQueue = useCallback(
     async (control: "skip" | "complete") => {
-      const token = useRoomStore.getState().hostToken;
-      if (!isHost || !token) return false;
-      return roomApi.queueControl(roomCode, token, control);
+      const { hostToken, guestId } = useRoomStore.getState();
+      if (!hostToken && !guestId) return false;
+      const res = await roomApi.queueControl(
+        roomCode,
+        { hostToken, guestId },
+        control,
+      );
+      return res.ok;
     },
-    [isHost, roomCode],
+    [roomCode],
   );
 
   const handleSettingsChange = async (next: HostSettings) => {

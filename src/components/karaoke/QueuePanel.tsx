@@ -23,7 +23,7 @@ export default function QueuePanel({ roomCode, onAddSong, isHost }: QueuePanelPr
   const control = (control: string, payload: { id?: string; toIndex?: number } = {}) => {
     const st = useRoomStore.getState();
     if (!st.hostToken || !isHost) return;
-    void roomApi.queueControl(roomCode, st.hostToken, control, payload);
+    void roomApi.queueControl(roomCode, { hostToken: st.hostToken, guestId: st.guestId }, control, payload);
   };
 
   const handleRemove = (id: string, title: string) => {

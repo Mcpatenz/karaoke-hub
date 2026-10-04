@@ -221,7 +221,7 @@ function PlayerControls({
 
   const handleNext = async () => {
     const ok = await onNext("skip");
-    if (!ok) toast("Queue is empty — add a song first", "error");
+    if (!ok) toast("Could not skip — check your connection", "error");
   };
 
   const handleVolume = (delta: number) => {

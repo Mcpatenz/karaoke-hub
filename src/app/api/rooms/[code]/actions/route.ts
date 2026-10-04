@@ -55,10 +55,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         return NextResponse.json({ ok: false, error: "control required" }, { status: 400 });
       }
       return respond(
-        queueControl(code, body.hostToken ?? "", body.control as QueueControlAction, {
-          id: body.id,
-          toIndex: body.toIndex,
-        }),
+        queueControl(
+          code,
+          body.hostToken ?? "",
+          body.control as QueueControlAction,
+          { id: body.id, toIndex: body.toIndex },
+          { guestId: body.guestId },
+        ),
       );
     case "settings":
       if (!body.settings) {

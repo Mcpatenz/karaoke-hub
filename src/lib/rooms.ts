@@ -274,14 +274,29 @@ function advanceQueue(room: Room): void {
   room.queue.upcoming = room.queue.upcoming.slice(1);
 }
 
+/** Advancing the shared queue is safe for anyone in the room: a song ending on a
+ *  guest's phone must move the room on, otherwise the party stalls. */
+const GUEST_QUEUE_ACTIONS: QueueControlAction[] = ["skip", "complete"];
+
 export function queueControl(
   code: string,
   hostToken: string,
   action: QueueControlAction,
   payload: { id?: string; toIndex?: number } = {},
+  identity: { guestId?: string } = {},
 ) {
   const room = getRoom(code);
-  if (!authorizeHost(room, hostToken)) return { ok: false, error: "Not authorized" };
+  const hostOk = room != null && hostToken != null && room.hostToken === hostToken;
+  const guestId = identity.guestId;
+  const allowedAsGuest =
+    room != null &&
+    !hostOk &&
+    guestId != null &&
+    room.settings.allowGuestControl &&
+    GUEST_QUEUE_ACTIONS.includes(action) &&
+    (room.guests.some((g) => g.id === guestId) ||
+      room.pendingGuests.some((g) => g.id === guestId));
+  if (!hostOk && !allowedAsGuest) return { ok: false, error: "Not authorized" };
 
   switch (action) {
     case "playNext": {

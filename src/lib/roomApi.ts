@@ -126,17 +126,18 @@ export function addSong(
 
 export function queueControl(
   code: string,
-  hostToken: string,
+  identity: { hostToken?: string | null; guestId?: string | null },
   control: string,
   payload: { id?: string; toIndex?: number } = {},
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   return post(`/api/rooms/${encodeURIComponent(code.toUpperCase())}/actions`, {
     action: "queue-control",
     control,
-    hostToken,
+    hostToken: identity.hostToken ?? undefined,
+    guestId: identity.guestId ?? undefined,
     id: payload.id,
     toIndex: payload.toIndex,
-  }).then((r) => r.ok);
+  }).then((r) => ({ ok: r.ok, error: r.error as string | undefined }));
 }
 
 export function updateSettings(code: string, hostToken: string, settings: HostSettings): Promise<boolean> {
