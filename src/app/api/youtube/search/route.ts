@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export interface YoutubeVideoResult {
   videoId: string;
   title: string;
@@ -22,16 +24,39 @@ interface VideoRendererLike {
 }
 
 /**
- * Key-less karaoke video search over YouTube.
+ * Karaoke video search for YouTube.
  *
- * Fetches YouTube's search results page and parses the embedded `ytInitialData`
- * JSON for video items. Used only as a fallback when no YouTube API key is set;
- * the UI still works if this is ever blocked.
+ * Primary path is the official YouTube Data API v3 (needs YOUTUBE_API_KEY, read
+ * here on the server so the key never reaches the browser). Without a key we
+ * fall back to parsing YouTube's own search page, which gets blocked from cloud
+ * IPs — that is why the key matters.
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") ?? "").trim();
-  if (!q) return NextResponse.json({ videos: [] });
+  if (!q) return NextResponse.json({ videos: [], source: "empty" });
+
+  const apiKey = readApiKey();
+
+  if (apiKey) {
+    // A Data API search costs 100 quota units, so identical queries are served
+    // from a short-lived cache instead of billing every page load.
+    const cached = readCache(q);
+    if (cached) return NextResponse.json({ videos: cached, source: "api", cached: true });
+
+    try {
+      const videos = await searchWithApi(q, apiKey);
+      writeCache(q, videos);
+      return NextResponse.json({ videos, source: "api" });
+    } catch (err) {
+      // Surface the real reason (bad key, quota, network) instead of quietly
+      // returning nothing, which is indistinguishable from "no matches".
+      return NextResponse.json(
+        { videos: [], source: "api", error: describeApiError(err) },
+        { status: 502 },
+      );
+    }
+  }
 
   let lastStatus = 0;
   let videos: YoutubeVideoResult[] = [];
@@ -85,14 +110,196 @@ export async function GET(request: Request) {
   }
 
   if (videos.length > 0) {
-    return NextResponse.json({ videos });
+    return NextResponse.json({ videos, source: "scrape" });
   }
 
   // Distinguish "we got blocked" from "no results matched".
   if (lastStatus === 0 || lastStatus >= 400) {
-    return NextResponse.json({ videos: [], error: "youtube_blocked" }, { status: 502 });
+    return NextResponse.json(
+      {
+        videos: [],
+        source: "scrape",
+        error: "YouTube search is blocked from this server. Add YOUTUBE_API_KEY to .env.local.",
+      },
+      { status: 502 },
+    );
   }
-  return NextResponse.json({ videos });
+  return NextResponse.json({ videos, source: "scrape" });
+}
+
+function readApiKey(): string {
+  const raw = process.env.YOUTUBE_API_KEY ?? process.env.NEXT_PUBLIC_YOUTUBE_API_KEY ?? "";
+  return raw.trim().replace(/^["']|["']$/g, "");
+}
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_MAX = 60;
+const searchCache = new Map<string, { at: number; videos: YoutubeVideoResult[] }>();
+
+function readCache(q: string): YoutubeVideoResult[] | undefined {
+  const hit = searchCache.get(q.toLowerCase());
+  if (!hit) return undefined;
+  if (Date.now() - hit.at > CACHE_TTL_MS) {
+    searchCache.delete(q.toLowerCase());
+    return undefined;
+  }
+  return hit.videos;
+}
+
+function writeCache(q: string, videos: YoutubeVideoResult[]): void {
+  if (searchCache.size >= CACHE_MAX) {
+    const oldest = searchCache.keys().next().value;
+    if (oldest !== undefined) searchCache.delete(oldest);
+  }
+  searchCache.set(q.toLowerCase(), { at: Date.now(), videos });
+}
+
+/** The Data API returns HTML-escaped titles ("It&#39;s", "&amp;"). */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Official Data API v3 search. A search call costs 100 quota units, so this is
+ * the only API request per query — durations are filled in afterwards by a
+ * single batched videos.list call (1 unit) instead of per-result lookups.
+ */
+async function searchWithApi(q: string, apiKey: string): Promise<YoutubeVideoResult[]> {
+  const url = new URL("https://www.googleapis.com/youtube/v3/search");
+  url.searchParams.set("part", "snippet");
+  url.searchParams.set("type", "video");
+  url.searchParams.set("q", `${q} karaoke`);
+  url.searchParams.set("maxResults", "25");
+  url.searchParams.set("relevanceLanguage", "en");
+  // Only return videos that can actually play inside our embedded player,
+  // otherwise YouTube reports "Video unavailable" on the stage.
+  url.searchParams.set("videoEmbeddable", "true");
+  url.searchParams.set("videoSyndicated", "true");
+  url.searchParams.set("key", apiKey);
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new ApiError(res.status, body);
+  }
+
+  const data = (await res.json()) as {
+    items?: {
+      id?: { videoId?: string };
+      snippet?: {
+        title?: string;
+        channelTitle?: string;
+        publishedAt?: string;
+        thumbnails?: { default?: { url?: string }; medium?: { url?: string }; high?: { url?: string } };
+      };
+    }[];
+  };
+
+  const videos: YoutubeVideoResult[] = [];
+  for (const item of data.items ?? []) {
+    const videoId = item.id?.videoId;
+    const title = item.snippet?.title;
+    if (!videoId || !title) continue;
+    const th = item.snippet?.thumbnails;
+    videos.push({
+      videoId,
+      title: decodeHtmlEntities(title),
+      channel: decodeHtmlEntities(item.snippet?.channelTitle ?? ""),
+      thumbnail: th?.high?.url ?? th?.medium?.url ?? th?.default?.url ?? "",
+      publishedTime: item.snippet?.publishedAt,
+    });
+    if (videos.length >= 20) break;
+  }
+
+  await attachDurations(videos, apiKey);
+  return videos;
+}
+
+class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(`YouTube API ${status}`);
+  }
+}
+
+function describeApiError(err: unknown): string {
+  if (!(err instanceof ApiError)) {
+    return "Could not reach the YouTube API. Check your internet connection.";
+  }
+  let reason = "";
+  try {
+    const parsed = JSON.parse(err.body) as { error?: { message?: string } };
+    reason = parsed.error?.message ?? "";
+  } catch {
+    reason = err.body.slice(0, 160);
+  }
+  if (err.status === 400 || /API key not valid/i.test(reason)) {
+    return `YouTube rejected the API key. Check YOUTUBE_API_KEY in .env.local. ${reason}`.trim();
+  }
+  if (err.status === 403 || /quota/i.test(reason)) {
+    return `YouTube API quota exhausted or key restricted. ${reason}`.trim();
+  }
+  return `YouTube API error ${err.status}. ${reason}`.trim();
+}
+
+/** One batched videos.list call (1 quota unit) fills in real durations. */
+async function attachDurations(videos: YoutubeVideoResult[], apiKey: string): Promise<void> {
+  if (videos.length === 0) return;
+  try {
+    const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+    url.searchParams.set("part", "contentDetails,statistics");
+    url.searchParams.set("id", videos.map((v) => v.videoId).join(","));
+    url.searchParams.set("maxResults", "50");
+    url.searchParams.set("key", apiKey);
+
+    const res = await fetch(url.toString(), { cache: "no-store" });
+    if (!res.ok) return;
+    const data = (await res.json()) as {
+      items?: {
+        id?: string;
+        contentDetails?: { duration?: string };
+        statistics?: { viewCount?: string };
+      }[];
+    };
+
+    const byId = new Map<string, { duration?: string; views?: number }>();
+    for (const item of data.items ?? []) {
+      if (!item.id) continue;
+      const seconds = isoToSeconds(item.contentDetails?.duration);
+      const views = Number(item.statistics?.viewCount);
+      byId.set(item.id, {
+        duration: seconds ? `${seconds}` : undefined,
+        views: Number.isFinite(views) ? views : undefined,
+      });
+    }
+
+    for (const video of videos) {
+      const extra = byId.get(video.videoId);
+      if (!extra) continue;
+      if (extra.duration) video.duration = extra.duration;
+      if (extra.views) video.views = extra.views;
+    }
+  } catch {
+    /* durations are a nice-to-have, search results still work without them */
+  }
+}
+
+function isoToSeconds(iso?: string): number | undefined {
+  if (!iso) return undefined;
+  const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso);
+  if (!m) return undefined;
+  const [, d, h, min, s] = m.map((x) => (x ? Number(x) : 0));
+  return d * 86400 + h * 3600 + min * 60 + s;
 }
 
 /** Pull the `var ytInitialData = {...};` object using a small brace matcher. */
@@ -183,7 +390,15 @@ function extractVideos(data: unknown): YoutubeVideoResult[] {
       const publishedTime = vr.publishedTimeText?.simpleText ?? undefined;
       const views = parseViews(vr.viewCountText?.simpleText);
 
-      videos.push({ videoId: vr.videoId, title, channel, thumbnail: thumb, views, duration, publishedTime });
+      videos.push({
+        videoId: vr.videoId,
+        title: decodeHtmlEntities(title),
+        channel: decodeHtmlEntities(channel),
+        thumbnail: thumb,
+        views,
+        duration,
+        publishedTime,
+      });
     }
   }
 

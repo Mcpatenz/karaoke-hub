@@ -7,12 +7,12 @@ export const metadata: Metadata = {
     "Your live karaoke room. Share the room code or QR code so guests can queue songs and sing along in real time with synchronized lyrics.",
   robots: { index: false },
   openGraph: {
-    title: "Karaoke Room — Live Session | Mcpatenz Karaoke Hub",
+    title: "Karaoke Room — Live Session | Mcpatenz-KaraokeHub",
     description:
       "Your live karaoke room. Queue songs, follow lyrics, and sing with friends.",
   },
   twitter: {
-    title: "Karaoke Room — Live Session | Mcpatenz Karaoke Hub",
+    title: "Karaoke Room — Live Session | Mcpatenz-KaraokeHub",
     description:
       "Your live karaoke room. Queue songs, follow lyrics, and sing with friends.",
   },

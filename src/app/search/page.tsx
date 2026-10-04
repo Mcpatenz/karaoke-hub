@@ -10,13 +10,13 @@ export const metadata: Metadata = {
     canonical: "/search",
   },
   openGraph: {
-    title: "Search Karaoke Songs | Mcpatenz Karaoke Hub",
+    title: "Search Karaoke Songs | Mcpatenz-KaraokeHub",
     description:
       "Search thousands of karaoke songs by title, artist, or album.",
     url: "/search",
   },
   twitter: {
-    title: "Search Karaoke Songs | Mcpatenz Karaoke Hub",
+    title: "Search Karaoke Songs | Mcpatenz-KaraokeHub",
     description: "Search thousands of karaoke songs by title, artist, or album.",
   },
 };

@@ -60,7 +60,9 @@ export default function GuestList({
                   {guest.name.charAt(0) || "?"}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-text-primary">{guest.name}</p>
+                  <p title={guest.name} className="truncate text-sm font-medium text-text-primary">
+                  {guest.name}
+                </p>
                   <p className="text-[11px] text-text-tertiary">Wants to join</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -102,7 +104,7 @@ export default function GuestList({
                 {guest.name.charAt(0) || "?"}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-text-primary">
+                <p title={guest.name} className="truncate text-sm font-medium text-text-primary">
                   {guest.name}
                   {guest.name === currentGuestName && (
                     <span className="ml-2 text-xs text-text-tertiary">(you)</span>

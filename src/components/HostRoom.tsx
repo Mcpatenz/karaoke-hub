@@ -398,7 +398,7 @@ export default function HostRoom({ roomCode, hostName }: HostRoomProps) {
       {step === 0 && (
         <OnboardingModal title="Landscape Mode" subtitle="Recommended for Mobile">
           <p className="text-sm text-text-tertiary">
-            For the best KaraokeHub experience on mobile, Landscape mode is strongly recommended.
+            For the best Mcpatenz-KaraokeHub experience on mobile, Landscape mode is strongly recommended.
           </p>
           <ul className="mt-4 space-y-2">
             {LANDSCAPE_BENEFITS.map((benefit) => (

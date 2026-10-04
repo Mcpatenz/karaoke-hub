@@ -38,6 +38,7 @@ function RoomInner() {
   const { isLocked, setLocked } = useRoomStore();
   const addToQueue = useQueueStore((s) => s.addToQueue);
   const completeCurrent = useQueueStore((s) => s.completeCurrent);
+  const skipCurrent = useQueueStore((s) => s.skipCurrent);
   const nowPlaying = useQueueStore((s) => s.nowPlaying);
   const { toast } = useToast();
   const [joined, setJoined] = useState(true);
@@ -66,13 +67,7 @@ function RoomInner() {
         addToQueue(item);
       })
       .catch(() => {
-        addToQueue({
-          id: `q-${queueCounter++}`,
-          songId: "np",
-          title: "Perfect",
-          artist: "Ed Sheeran",
-          addedBy: "DJ Nova",
-        });
+        /* leave the queue empty when YouTube search is unavailable */
       });
   }, [addToQueue]);
 
@@ -134,7 +129,11 @@ function RoomInner() {
           <div className="min-w-0 space-y-4">
             {nowPlaying ? (
               <div className="aspect-video w-full overflow-hidden rounded-[var(--radius-sm)] border border-border-default">
-                <NowPlayingStage song={nowPlaying} onEnded={completeCurrent} />
+                <NowPlayingStage
+                  song={nowPlaying}
+                  onEnded={completeCurrent}
+                  onSkip={skipCurrent}
+                />
               </div>
             ) : (
               <div className="grid aspect-video w-full place-items-center rounded-[var(--radius-sm)] border border-border-default bg-surface-strong/40 text-sm text-text-tertiary">

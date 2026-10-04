@@ -4,9 +4,9 @@ import MobileNav from "@/components/layout/MobileNav";
 import { ToastProvider } from "@/components/ui/Toast";
 
 export const metadata: Metadata = {
-  title: "Mcpatenz Karaoke Hub — Host a Room & Own the Mic",
+  title: "Mcpatenz-KaraokeHub — Host a Room & Own the Mic",
   description:
-    "Mcpatenz Karaoke Hub is a premium karaoke room. Host a session, queue live songs, follow synchronized lyrics, and invite friends to sing together in real time. No account needed.",
+    "Mcpatenz-KaraokeHub is a premium karaoke room. Host a session, queue live songs, follow synchronized lyrics, and invite friends to sing together in real time. No account needed.",
   alternates: {
     canonical: "/",
   },
@@ -23,14 +23,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "/",
-    siteName: "Mcpatenz Karaoke Hub",
-    title: "Mcpatenz Karaoke Hub — Sing. Connect. Shine.",
+    siteName: "Mcpatenz-KaraokeHub",
+    title: "Mcpatenz-KaraokeHub — Sing. Connect. Shine.",
     description:
       "Host a premium karaoke room, queue live songs, and own the mic with synchronized lyrics.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Mcpatenz Karaoke Hub — Sing. Connect. Shine.",
+    title: "Mcpatenz-KaraokeHub — Sing. Connect. Shine.",
     description: "Premium virtual karaoke. Host a room, invite friends, own the mic.",
   },
 };
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
-  name: "Mcpatenz Karaoke Hub",
+  name: "Mcpatenz-KaraokeHub",
   applicationCategory: "EntertainmentApplication",
   operatingSystem: "Any",
   description:

@@ -49,19 +49,30 @@ function AddSongBody({ onAddSong }: { onAddSong: (song: Song) => boolean }) {
   const [results, setResults] = useState<Song[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Song | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [topPlayed, setTopPlayed] = useState<Song[]>([]);
   const [loadingTop, setLoadingTop] = useState(true);
+  const [topError, setTopError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoadingTop(true);
-    songProvider.getTopPlayed(10).then((songs) => {
-      if (!cancelled) setTopPlayed(songs);
-    }).finally(() => {
-      if (!cancelled) setLoadingTop(false);
-    });
+    songProvider
+      .getTopPlayed(10)
+      .then((songs) => {
+        if (cancelled) return;
+        setTopPlayed(songs);
+        setTopError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setTopError(err instanceof Error ? err.message : "Could not load suggestions");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTop(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -84,18 +95,25 @@ function AddSongBody({ onAddSong }: { onAddSong: (song: Song) => boolean }) {
       setResults([]);
       setHasSearched(false);
       setIsLoading(false);
+      setError(null);
       return;
     }
     setIsLoading(true);
     setHasSearched(true);
-    const controller = new AbortController();
     const timer = setTimeout(() => {
-      songProvider.searchSongs(q).then((res) => setResults(res)).finally(() => setIsLoading(false));
+      songProvider
+        .searchSongs(q)
+        .then((res) => {
+          setResults(res);
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          setResults([]);
+          setError(err instanceof Error ? err.message : "Song search failed");
+        })
+        .finally(() => setIsLoading(false));
     }, 300);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
+    return () => clearTimeout(timer);
   }, [query]);
 
   const handleAdd = (song: Song) => {
@@ -133,6 +151,7 @@ function AddSongBody({ onAddSong }: { onAddSong: (song: Song) => boolean }) {
           <TopPlayedList
             songs={topPlayed}
             loading={loadingTop}
+            error={topError}
             addedIds={addedIds}
             onAdd={(song) => handleAdd(song)}
             onOpen={(song) => setPreview(song)}
@@ -146,7 +165,14 @@ function AddSongBody({ onAddSong }: { onAddSong: (song: Song) => boolean }) {
           </div>
         )}
 
-        {!isLoading && hasSearched && results.length === 0 && (
+        {!isLoading && hasSearched && error && (
+          <div className="rounded-[var(--radius-xs)] border border-status-error/40 bg-status-error/10 px-3 py-4 text-center">
+            <p className="text-sm font-semibold text-status-error">Search unavailable</p>
+            <p className="mt-1 text-xs text-text-tertiary">{error}</p>
+          </div>
+        )}
+
+        {!isLoading && hasSearched && !error && results.length === 0 && (
           <div className="py-10 text-center">
             <p className="text-sm font-medium text-text-primary">No songs found</p>
             <p className="mt-1 text-xs text-text-tertiary">Try a different title, artist, or album.</p>
@@ -231,12 +257,14 @@ function SearchBar({
 function TopPlayedList({
   songs,
   loading,
+  error,
   addedIds,
   onAdd,
   onOpen,
 }: {
   songs: Song[];
   loading: boolean;
+  error?: string | null;
   addedIds: Set<string>;
   onAdd: (song: Song) => void;
   onOpen: (song: Song) => void;
@@ -257,6 +285,11 @@ function TopPlayedList({
         <div className="flex items-center justify-center gap-2 py-8 text-text-tertiary" role="status">
           <Loader2 className="h-5 w-5 animate-spin text-accent" aria-hidden="true" />
           <span className="text-sm">Loading top songs...</span>
+        </div>
+      ) : error ? (
+        <div className="rounded-[var(--radius-xs)] border border-status-error/40 bg-status-error/10 px-3 py-4 text-center">
+          <p className="text-sm font-semibold text-status-error">Suggestions unavailable</p>
+          <p className="mt-1 text-xs text-text-tertiary">{error}</p>
         </div>
       ) : (
         <motion.ul className="flex flex-col gap-2">
@@ -467,14 +500,19 @@ function PreviewDrawer({
 
             <div className="rounded-[var(--radius-sm)] border border-border-default bg-[#181818] p-2">
               {song.videoId ? (
-                <div className="aspect-video w-full overflow-hidden rounded-[var(--radius-xs)] bg-black">
+                <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-xs)] bg-black">
                   <iframe
                     key={song.videoId}
-                    src={`https://www.youtube-nocookie.com/embed/${song.videoId}?rel=0${playing ? "&autoplay=1" : ""}`}
+                    src={`https://www.youtube-nocookie.com/embed/${song.videoId}?rel=0&modestbranding=1${playing ? "&autoplay=1" : ""}`}
                     title={`${song.title} karaoke video`}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
+                    allow="autoplay; encrypted-media"
                     className="h-full w-full"
+                  />
+                  {/* Keeps the embed from linking out to YouTube */}
+                  <div
+                    className="absolute inset-0"
+                    onContextMenu={(e) => e.preventDefault()}
+                    aria-hidden="true"
                   />
                 </div>
               ) : (

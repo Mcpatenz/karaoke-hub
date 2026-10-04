@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { joinRoom } from "@/lib/rooms";
+import { isNameTooLong, NAME_LENGTH_ERROR } from "@/lib/roomLimits";
 
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  let body: { guestId?: string; name?: string } = {};
+  let body: { guestId?: string; name?: string; autoApprove?: boolean } = {};
   try {
     body = await request.json();
   } catch {
@@ -14,7 +15,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     return NextResponse.json({ ok: false, error: "guestId and name required" }, { status: 400 });
   }
 
-  const res = joinRoom(code, body.guestId, body.name.trim());
+  const name = body.name.trim();
+  if (isNameTooLong(name)) {
+    return NextResponse.json({ ok: false, error: NAME_LENGTH_ERROR }, { status: 400 });
+  }
+
+  const res = joinRoom(code, body.guestId, name, { autoApprove: body.autoApprove === true });
   if (!res.ok) {
     return NextResponse.json({ ok: false, error: res.error }, { status: 404 });
   }

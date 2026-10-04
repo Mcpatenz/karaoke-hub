@@ -98,7 +98,7 @@ export default function WelcomeModal({ open, onClose }: WelcomeModalProps) {
             <span className="font-semibold text-text-primary">Jonel B. Pateño</span>
           </p>
           <p className="mt-2 text-xs text-text-tertiary">
-            If you enjoy using KaraokeHub, donations are appreciated!
+            If you enjoy using Mcpatenz-KaraokeHub, donations are appreciated!
           </p>
           <div className="mt-3 flex items-center justify-between gap-3 rounded-[var(--radius-xs)] border border-accent/30 bg-accent/10 px-4 py-3">
             <span className="flex items-center gap-2 text-sm font-semibold text-text-primary">

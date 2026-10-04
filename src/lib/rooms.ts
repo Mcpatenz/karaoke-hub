@@ -1,6 +1,7 @@
 import type { Guest, GuestStatus } from "@/stores/roomStore";
 import type { QueueItem } from "@/stores/queueStore";
 import { DEFAULT_SETTINGS, type HostSettings } from "@/lib/roomSettings";
+import { clampName } from "@/lib/roomLimits";
 
 export type ViewerRole = "host" | "guest" | "pending" | "denied";
 
@@ -48,8 +49,17 @@ interface Subscriber {
 
 const MAX_GUESTS = 50;
 
-const rooms = new Map<string, Room>();
-const roomSubscribers = new Map<string, Set<Subscriber>>();
+/**
+ * Kept on globalThis so every route handler shares one store. Under Turbopack
+ * dev (and Fast Refresh) each route is bundled separately, so a module-level
+ * Map would give /create and /join separate rooms and every join would 404.
+ */
+const globals = globalThis as unknown as {
+  __karaokeRooms?: Map<string, Room>;
+  __karaokeRoomSubscribers?: Map<string, Set<Subscriber>>;
+};
+const rooms = (globals.__karaokeRooms ??= new Map());
+const roomSubscribers = (globals.__karaokeRoomSubscribers ??= new Map());
 
 function randomId(prefix = ""): string {
   return `${prefix}${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`;
@@ -71,10 +81,11 @@ export function getRoom(code: string): Room | null {
 }
 
 export function createRoom(name: string): { code: string; hostToken: string } {
-  const code = makeCode(name);
+  const hostName = clampName(name) || "Host";
+  const code = makeCode(hostName);
   rooms.set(code, {
     code,
-    hostName: name.trim() || "DJ",
+    hostName,
     hostToken: randomId("ht-"),
     guests: [],
     pendingGuests: [],
@@ -142,10 +153,16 @@ export function subscribe(code: string, viewer: RoomViewer, send: Subscriber["se
   };
 }
 
+/**
+ * `autoApprove` is used by the room link itself (/host/<code>): someone who just
+ * opens the link is let straight in, while people who type a name on the home
+ * page still wait for the host to approve them.
+ */
 export function joinRoom(
   code: string,
   guestId: string,
   name: string,
+  options: { autoApprove?: boolean } = {},
 ): { ok: boolean; guestStatus: GuestStatus; error?: string } {
   const room = getRoom(code);
   if (!room) return { ok: false, guestStatus: "idle", error: "Room not found" };
@@ -154,8 +171,8 @@ export function joinRoom(
   if (room.guests.length >= MAX_GUESTS) {
     return { ok: false, guestStatus: "denied", error: "Room is full" };
   }
-  const guest: Guest = { id: guestId, name: name.trim() || "Guest", isHost: false };
-  if (room.settings.roomOpen) {
+  const guest: Guest = { id: guestId, name: clampName(name) || "Guest", isHost: false };
+  if (room.settings.roomOpen || options.autoApprove) {
     room.guests.push(guest);
     broadcast(code);
     return { ok: true, guestStatus: "approved" };
@@ -243,6 +260,20 @@ export function addQueueItem(
 
 export type QueueControlAction = "playNext" | "remove" | "moveToPosition" | "skip" | "complete" | "clear";
 
+/**
+ * Moves the queue on by one entry. Also works while the stage is idle, so the
+ * host can start the first song with the Next button instead of only when a
+ * track is already on screen.
+ */
+function advanceQueue(room: Room): void {
+  const next = room.queue.upcoming[0] ?? null;
+  if (room.queue.nowPlaying) {
+    room.queue.history = [...room.queue.history, room.queue.nowPlaying];
+  }
+  room.queue.nowPlaying = next;
+  room.queue.upcoming = room.queue.upcoming.slice(1);
+}
+
 export function queueControl(
   code: string,
   hostToken: string,
@@ -280,11 +311,10 @@ export function queueControl(
     }
     case "skip":
     case "complete": {
-      if (!room.queue.nowPlaying) return { ok: false, error: "Nothing playing" };
-      const next = room.queue.upcoming[0] ?? null;
-      room.queue.history = [...room.queue.history, room.queue.nowPlaying];
-      room.queue.nowPlaying = next;
-      room.queue.upcoming = room.queue.upcoming.slice(1);
+      if (!room.queue.nowPlaying && room.queue.upcoming.length === 0) {
+        return { ok: false, error: "Queue is empty" };
+      }
+      advanceQueue(room);
       break;
     }
     case "clear": {

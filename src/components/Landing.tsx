@@ -9,6 +9,7 @@ import Input from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useRoomStore } from "@/stores/roomStore";
 import { roomApi } from "@/lib/roomApi";
+import { NAME_MAX_LENGTH } from "@/lib/roomLimits";
 import QrScanner from "@/components/QrScanner";
 import { StageBackground } from "@/components/karaoke/StageBackground";
 import WelcomeModal from "@/components/WelcomeModal";
@@ -36,7 +37,7 @@ function JoinSection() {
 
   const hostRoom = async () => {
     if (!hostName.trim()) {
-      toast("Enter a DJ name to start the party", "error");
+      toast("Enter a host name to start the party", "error");
       return;
     }
     const res = await roomApi.createRoom(hostName.trim());
@@ -170,11 +171,14 @@ function JoinSection() {
               <h2 className="text-lg font-semibold">Host a Room</h2>
             </div>
             <Input
-              label="Your Name"
+              label="Host Name"
               placeholder="e.g. Nova"
               value={hostName}
               onChange={(e) => setHostName(e.target.value)}
               icon={Mic}
+              maxLength={NAME_MAX_LENGTH}
+              autoComplete="nickname"
+              enterKeyHint="go"
             />
             <Button type="submit" fullWidth className="mt-4">
               START PARTY
@@ -204,6 +208,9 @@ function JoinSection() {
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
               icon={Mic}
+              maxLength={NAME_MAX_LENGTH}
+              autoComplete="nickname"
+              enterKeyHint="next"
             />
             <div className="mt-4">
               <Input

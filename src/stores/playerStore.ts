@@ -13,6 +13,7 @@ interface PlayerStore {
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
   setVolume: (volume: number) => void;
+  setMuted: (muted: boolean) => void;
   toggleMute: () => void;
   toggleFullscreen: () => void;
 }
@@ -28,6 +29,7 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
   setCurrentTime: (currentTime) => set({ currentTime }),
   setDuration: (duration) => set({ duration }),
   setVolume: (volume) => set({ volume }),
+  setMuted: (isMuted) => set({ isMuted }),
   toggleMute: () => set((s) => ({ isMuted: !s.isMuted })),
   toggleFullscreen: () => set((s) => ({ isFullscreen: !s.isFullscreen })),
 }));

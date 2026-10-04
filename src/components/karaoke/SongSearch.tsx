@@ -31,6 +31,7 @@ export default function SongSearch({ onAddSong, className = "" }: SongSearchProp
       songProvider
         .searchSongs(q)
         .then((s) => setResults(s))
+        .catch(() => setResults([]))
         .finally(() => setLoading(false));
       setHasSearched(true);
     }, 300);

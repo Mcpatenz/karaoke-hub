@@ -10,13 +10,13 @@ export const metadata: Metadata = {
     canonical: "/favorites",
   },
   openGraph: {
-    title: "Your Favorite Karaoke Songs | Mcpatenz Karaoke Hub",
+    title: "Your Favorite Karaoke Songs | Mcpatenz-KaraokeHub",
     description:
       "Keep track of your most-loved karaoke songs.",
     url: "/favorites",
   },
   twitter: {
-    title: "Your Favorite Karaoke Songs | Mcpatenz Karaoke Hub",
+    title: "Your Favorite Karaoke Songs | Mcpatenz-KaraokeHub",
     description: "Keep track of your most-loved karaoke songs.",
   },
 };

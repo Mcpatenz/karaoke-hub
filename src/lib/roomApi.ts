@@ -60,8 +60,13 @@ export function joinRoom(
   code: string,
   guestId: string,
   name: string,
+  options: { autoApprove?: boolean } = {},
 ): Promise<{ ok: boolean; guestStatus?: GuestStatus; error?: string }> {
-  return post(`/api/rooms/${encodeURIComponent(code.toUpperCase())}/join`, { guestId, name }).then((r) => ({
+  return post(`/api/rooms/${encodeURIComponent(code.toUpperCase())}/join`, {
+    guestId,
+    name,
+    autoApprove: options.autoApprove === true,
+  }).then((r) => ({
     ok: r.ok,
     guestStatus: r.guestStatus as GuestStatus | undefined,
     error: r.error,

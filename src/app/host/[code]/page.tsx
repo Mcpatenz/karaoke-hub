@@ -8,7 +8,7 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { code } = await params;
   return {
-    title: `ROOM: ${code} — Mcpatenz Karaoke Hub`,
+    title: `ROOM: ${code} — Mcpatenz-KaraokeHub`,
     description:
       "Your live karaoke room. Share the room code or QR code so guests can queue songs and sing along in real time.",
     robots: { index: false },

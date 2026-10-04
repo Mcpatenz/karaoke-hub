@@ -11,13 +11,13 @@ export const metadata: Metadata = {
     canonical: "/discover",
   },
   openGraph: {
-    title: "Discover Trending Karaoke Songs | Mcpatenz Karaoke Hub",
+    title: "Discover Trending Karaoke Songs | Mcpatenz-KaraokeHub",
     description:
       "Browse trending karaoke songs and find your next performance.",
     url: "/discover",
   },
   twitter: {
-    title: "Discover Trending Karaoke Songs | Mcpatenz Karaoke Hub",
+    title: "Discover Trending Karaoke Songs | Mcpatenz-KaraokeHub",
     description: "Browse trending karaoke songs and find your next performance.",
   },
 };

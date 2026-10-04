@@ -13,7 +13,6 @@ interface QueueItemRowProps {
   onPlayNext: (id: string) => void;
   onMoveToTop: (id: string) => void;
   onRemove: (id: string, title: string) => void;
-  onView: (item: QueueItem) => void;
 }
 
 export default function QueueItemRow({
@@ -23,14 +22,12 @@ export default function QueueItemRow({
   onPlayNext,
   onMoveToTop,
   onRemove,
-  onView,
 }: QueueItemRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const menuItems: { label: string; onClick: () => void }[] = [
-    { label: "Play Next", onClick: () => onPlayNext(item.id) },
+    { label: "Play Now", onClick: () => onPlayNext(item.id) },
     { label: "Move to Top", onClick: () => onMoveToTop(item.id) },
-    { label: "View Song", onClick: () => onView(item) },
     {
       label: "Remove",
       onClick: () => onRemove(item.id, item.title),

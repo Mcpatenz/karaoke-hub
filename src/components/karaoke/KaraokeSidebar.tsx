@@ -4,11 +4,11 @@ import { useState, type RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ListMusic, Search, Settings, Users, Play, Pause, SkipForward, Plus, Minus, Volume2, VolumeX } from "lucide-react";
 import { useRoomStore } from "@/stores/roomStore";
-import { useQueueStore, type QueueItem } from "@/stores/queueStore";
+import { useQueueStore } from "@/stores/queueStore";
 import { roomApi } from "@/lib/roomApi";
 import { useToast } from "@/components/ui/Toast";
 import type { Song } from "@/stores/searchStore";
-import type { VideoPlayerHandle } from "./ModernVideoPlayer";
+import type { VideoPlayerHandle, VideoPlayerState } from "./ModernVideoPlayer";
 import QueuePanel from "./QueuePanel";
 import AddSongPanel from "./AddSongPanel";
 import SettingsPanel, { type HostSettings } from "./SettingsPanel";
@@ -22,8 +22,9 @@ interface KaraokeSidebarProps {
   settings: HostSettings;
   onSettingsChange: (s: HostSettings) => void;
   onAddSong: (song: Song) => boolean;
-  onViewSong: (item: QueueItem) => void;
   playerRef?: RefObject<VideoPlayerHandle | null>;
+  playerState: VideoPlayerState;
+  onNext: (control: "skip" | "complete") => Promise<boolean>;
   isHost: boolean;
 }
 
@@ -33,8 +34,9 @@ export default function KaraokeSidebar({
   settings,
   onSettingsChange,
   onAddSong,
-  onViewSong,
   playerRef,
+  playerState,
+  onNext,
   isHost,
 }: KaraokeSidebarProps) {
   const [tab, setTab] = useState<SidebarTab>("queue");
@@ -67,7 +69,6 @@ export default function KaraokeSidebar({
                 roomCode={roomCode}
                 isHost={isHost}
                 onAddSong={() => setTab("add")}
-                onViewSong={onViewSong}
               />
             )}
             {tab === "add" && (
@@ -88,14 +89,7 @@ export default function KaraokeSidebar({
       </div>
 
       {isHost && (
-        <PlayerControls
-          playerRef={playerRef}
-          onSkip={() => {
-            const st = useRoomStore.getState();
-            if (st.hostToken) void roomApi.queueControl(roomCode, st.hostToken, "skip");
-          }}
-          hasNowPlaying={!!queue.nowPlaying}
-        />
+        <PlayerControls playerRef={playerRef} state={playerState} onNext={onNext} canNext={queueCount > 0 || !!queue.nowPlaying} />
       )}
     </div>
   );
@@ -204,40 +198,38 @@ function SidebarTabs({
 
 function PlayerControls({
   playerRef,
-  onSkip,
-  hasNowPlaying,
+  state,
+  onNext,
+  canNext,
 }: {
   playerRef?: RefObject<VideoPlayerHandle | null>;
-  onSkip: () => void;
-  hasNowPlaying: boolean;
+  state: VideoPlayerState;
+  onNext: (control: "skip" | "complete") => Promise<boolean>;
+  canNext: boolean;
 }) {
-  const [volume, setVolume] = useState(70);
-  const [muted, setMuted] = useState(false);
-  const [playing, setPlaying] = useState(false);
-
+  const { toast } = useToast();
   const p = () => playerRef?.current;
 
+  const hasTrack = state.playState !== "idle";
+  const isPlaying = state.playState === "playing" || state.playState === "buffering";
+  const volume = state.volume;
+  const muted = state.muted;
+
   const handleTogglePlay = () => {
-    const next = !playing;
-    setPlaying(next);
     p()?.togglePlay();
   };
 
+  const handleNext = async () => {
+    const ok = await onNext("skip");
+    if (!ok) toast("Queue is empty — add a song first", "error");
+  };
+
   const handleVolume = (delta: number) => {
-    const next = Math.min(100, Math.max(0, volume + delta));
-    setVolume(next);
-    p()?.changeVolume(next);
-    if (next > 0 && muted) {
-      setMuted(false);
-      p()?.toggleMute();
-    }
+    p()?.changeVolume(Math.min(100, Math.max(0, volume + delta)));
   };
 
   const handleToggleMute = () => {
-    const next = !muted;
-    setMuted(next);
     p()?.toggleMute();
-    if (!next) setVolume(70);
   };
 
   const ctrl =
@@ -247,23 +239,31 @@ function PlayerControls({
     <div className="flex items-center justify-between gap-0.5 rounded-[var(--radius-xs)] border border-border-default bg-[#181818] p-1.5">
       <button
         type="button"
-        disabled={!hasNowPlaying}
+        disabled={!hasTrack}
         onClick={handleTogglePlay}
-        aria-label={playing ? "Pause" : "Play"}
+        aria-label={isPlaying ? "Pause" : "Play"}
         className="grid h-9 w-9 min-h-[44px] min-w-[44px] place-items-center rounded-[var(--radius-xs)] bg-accent text-text-inverse transition-all hover:scale-105 hover:bg-accent-hover hover:shadow-[0_0_16px_var(--color-accent-glow)] disabled:pointer-events-none disabled:opacity-30"
       >
-        {playing ? (
+        {isPlaying ? (
           <Pause className="h-4 w-4 fill-current" aria-hidden="true" />
         ) : (
           <Play className="h-4 w-4 fill-current" aria-hidden="true" />
         )}
       </button>
-      <button type="button" disabled={!hasNowPlaying} onClick={onSkip} aria-label="Next" className={ctrl}>
+      <button
+        type="button"
+        disabled={!canNext}
+        onClick={() => void handleNext()}
+        aria-label="Next song"
+        title="Next song"
+        className={ctrl}
+      >
         <SkipForward className="h-4 w-4" aria-hidden="true" />
       </button>
       <div className="mx-1 h-9 w-px bg-border-default" aria-hidden="true" />
       <button
         type="button"
+        disabled={!hasTrack}
         onClick={handleToggleMute}
         aria-label={muted ? "Unmute" : "Mute"}
         className={ctrl}
@@ -276,7 +276,7 @@ function PlayerControls({
       </button>
       <button
         type="button"
-        disabled={volume <= 0}
+        disabled={!hasTrack || volume <= 0}
         onClick={() => handleVolume(-10)}
         aria-label="Decrease volume"
         className={ctrl}
@@ -286,7 +286,7 @@ function PlayerControls({
       <span className="w-8 text-center text-xs font-medium text-text-tertiary">{volume}%</span>
       <button
         type="button"
-        disabled={volume >= 100}
+        disabled={!hasTrack || volume >= 100}
         onClick={() => handleVolume(10)}
         aria-label="Increase volume"
         className={ctrl}

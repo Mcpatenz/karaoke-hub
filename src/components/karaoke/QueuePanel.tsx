@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Trash2 } from "lucide-react";
-import { useQueueStore, type QueueItem } from "@/stores/queueStore";
+import { useQueueStore } from "@/stores/queueStore";
 import { useRoomStore } from "@/stores/roomStore";
 import { roomApi } from "@/lib/roomApi";
 import { useToast } from "@/components/ui/Toast";
@@ -12,11 +12,10 @@ import QueueItemRow, { EmptyQueue } from "./QueueItemRow";
 interface QueuePanelProps {
   roomCode: string;
   onAddSong: () => void;
-  onViewSong: (item: QueueItem) => void;
   isHost: boolean;
 }
 
-export default function QueuePanel({ roomCode, onAddSong, onViewSong, isHost }: QueuePanelProps) {
+export default function QueuePanel({ roomCode, onAddSong, isHost }: QueuePanelProps) {
   const { upcoming } = useQueueStore();
   const { toast } = useToast();
   const [confirmClear, setConfirmClear] = useState(false);
@@ -87,7 +86,6 @@ export default function QueuePanel({ roomCode, onAddSong, onViewSong, isHost }: 
                   onPlayNext={handlePlayNext}
                   onMoveToTop={handleMoveToTop}
                   onRemove={handleRemove}
-                  onView={onViewSong}
                 />
               ))}
             </AnimatePresence>

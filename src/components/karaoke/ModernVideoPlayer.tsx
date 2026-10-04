@@ -16,6 +16,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import type { QueueItem } from "@/stores/queueStore";
+import { usePlayerStore } from "@/stores/playerStore";
 
 interface YouTubePlayer {
   playVideo: () => void;
@@ -61,12 +62,23 @@ declare global {
 
 const YT_STATE = { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 } as const;
 type PlayState = "buffering" | "playing" | "paused" | "ended";
+/** "idle" is reported by the host room while no track is mounted. */
+export type VideoPlayerPlayState = PlayState | "idle";
 
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+export interface VideoPlayerState {
+  playState: VideoPlayerPlayState;
+  volume: number;
+  muted: boolean;
+}
 
 interface ModernVideoPlayerProps {
   song: QueueItem;
   onEnded?: () => void;
+  onSkip?: () => void;
+  canSkip?: boolean;
+  onStateChange?: (state: VideoPlayerState) => void;
 }
 
 export interface VideoPlayerHandle {
@@ -77,10 +89,11 @@ export interface VideoPlayerHandle {
   skip: () => void;
   toggleMute: () => void;
   changeVolume: (v: number) => void;
+  getState: () => VideoPlayerState;
 }
 
 export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayerProps>(
-  function ModernVideoPlayer({ song, onEnded }, ref) {
+  function ModernVideoPlayer({ song, onEnded, onSkip, canSkip = true, onStateChange }, ref) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
@@ -91,8 +104,8 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
   const [error, setError] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(song.duration ?? 0);
-  const [volume, setVolume] = useState(70);
-  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(() => Math.round(usePlayerStore.getState().volume * 100));
+  const [muted, setMuted] = useState(() => usePlayerStore.getState().isMuted);
   const [rate, setRate] = useState(1);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [dragging, setDragging] = useState(false);
@@ -105,10 +118,18 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
   playStateRef.current = playState;
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
   const endedRef = useRef(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+  const onSkipRef = useRef(onSkip);
+  onSkipRef.current = onSkip;
+
+  useEffect(() => {
+    onStateChange?.({ playState, volume, muted });
+  }, [onStateChange, playState, volume, muted]);
 
   const showControls = () => {
     setControlsVisible(true);
@@ -163,6 +184,7 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
             if (cancelled) return;
             playerRef.current = player;
             player.setVolume(volumeRef.current);
+            if (mutedRef.current) player.mute();
             setReady(true);
             player.playVideo();
           },
@@ -267,7 +289,8 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
   };
 
   const skipSong = () => {
-    dumpEnded();
+    if (onSkipRef.current) onSkipRef.current();
+    else dumpEnded();
     showControls();
   };
 
@@ -282,17 +305,22 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
     if (!p) return;
     if (muted) p.unMute();
     else p.mute();
-    setMuted(p.isMuted());
+    const nextMuted = p.isMuted();
+    setMuted(nextMuted);
+    usePlayerStore.getState().setMuted(nextMuted);
     showControls();
   };
 
   const changeVolume = (v: number) => {
     setVolume(v);
+    usePlayerStore.getState().setVolume(v / 100);
     const p = playerRef.current;
     if (p) {
       p.setVolume(v);
       if (v > 0 && p.isMuted()) p.unMute();
-      setMuted(p.isMuted());
+      const nextMuted = p.isMuted();
+      setMuted(nextMuted);
+      usePlayerStore.getState().setMuted(nextMuted);
     }
   };
 
@@ -369,6 +397,7 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
     skip: skipSong,
     toggleMute: toggleVolume,
     changeVolume,
+    getState: () => ({ playState: playStateRef.current, volume: volumeRef.current, muted: mutedRef.current }),
   }));
 
   return (
@@ -382,6 +411,18 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
     >
       {/* YouTube host slot (replaced by the player iframe) */}
       <div ref={hostRef} className="absolute inset-0" />
+
+      {/* Click shield — swallows clicks and the context menu over the embed so
+          nobody can hit the YouTube logo, end-screen cards or "copy video URL"
+          and leave the room. Playback is driven by our own controls, so the
+          embed never needs a direct click. */}
+      <div
+        className="absolute inset-0 z-[5] cursor-pointer"
+        onClick={togglePlay}
+        onDoubleClick={(e) => e.preventDefault()}
+        onContextMenu={(e) => e.preventDefault()}
+        aria-hidden="true"
+      />
 
       {/* Loading spinner until the player signals ready */}
       {!ready && !error ? (
@@ -403,14 +444,18 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
               This video cannot be played. It may have been removed or restricted.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={skipSong}
-            className="mt-2 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-surface-base transition-colors hover:bg-accent/80 focus-visible:outline-2 focus-visible:outline-accent"
-          >
-            <SkipForward className="h-4 w-4" aria-hidden="true" />
-            Skip Song
-          </button>
+          {canSkip ? (
+            <button
+              type="button"
+              onClick={skipSong}
+              className="mt-2 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-surface-base transition-colors hover:bg-accent/80 focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              <SkipForward className="h-4 w-4" aria-hidden="true" />
+              Skip Song
+            </button>
+          ) : (
+            <p className="text-sm text-text-tertiary">Waiting for the host to skip this song.</p>
+          )}
         </div>
       ) : null}
 
@@ -436,7 +481,12 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
           {song.artist}
           {song.channel ? ` • ${song.channel}` : ""}
         </p>
-        <p className="mt-0.5 truncate text-xs text-text-tertiary sm:text-sm">Added by {song.addedBy}</p>
+        <p
+          title={`Added by ${song.addedBy}`}
+          className="mt-0.5 truncate text-xs text-text-tertiary sm:text-sm"
+        >
+          Added by {song.addedBy}
+        </p>
       </div>
 
       {/* Center play / replay */}
@@ -514,9 +564,11 @@ export const ModernVideoPlayer = forwardRef<VideoPlayerHandle, ModernVideoPlayer
           <CtlBtn label="Forward 10 seconds" onClick={() => seekBy(10)} className="max-sm:hidden">
             <RotateCw className="h-4 w-4" aria-hidden="true" />
           </CtlBtn>
-          <CtlBtn label="Skip song" onClick={skipSong}>
-            <SkipForward className="h-4 w-4" aria-hidden="true" />
-          </CtlBtn>
+          {canSkip ? (
+            <CtlBtn label="Skip song" onClick={skipSong}>
+              <SkipForward className="h-4 w-4" aria-hidden="true" />
+            </CtlBtn>
+          ) : null}
 
           <div className="ml-1 min-w-0 whitespace-nowrap select-none text-xs tabular-nums text-white/90">
             {formatTime(activeTime)}

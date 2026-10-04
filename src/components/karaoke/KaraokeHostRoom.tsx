@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { LogOut, Mic, Monitor, Users, Clock, XCircle } from "lucide-react";
@@ -14,9 +14,11 @@ import WaitingScreen from "@/components/karaoke/WaitingScreen";
 import { NowPlayingStage } from "@/components/karaoke/NowPlayingStage";
 import KaraokeSidebar from "@/components/karaoke/KaraokeSidebar";
 import type { HostSettings } from "@/lib/roomSettings";
-import type { VideoPlayerHandle } from "@/components/karaoke/ModernVideoPlayer";
+import type { VideoPlayerHandle, VideoPlayerState } from "@/components/karaoke/ModernVideoPlayer";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const IDLE_PLAYER_STATE: VideoPlayerState = { playState: "idle", volume: 100, muted: false };
 
 interface KaraokeHostRoomProps {
   roomCode: string;
@@ -27,11 +29,27 @@ export default function KaraokeHostRoom({ roomCode }: KaraokeHostRoomProps) {
   const room = useRoomStore();
   const queue = useQueueStore();
   const playerRef = useRef<VideoPlayerHandle | null>(null);
+  const [playerState, setPlayerState] = useState<VideoPlayerState>(IDLE_PLAYER_STATE);
 
   useRoomRealtime(roomCode);
 
   const { isHost, guestStatus, settings, hostToken, guestId } = room;
   const queueCount = queue.upcoming.length;
+
+  useEffect(() => {
+    if (!queue.nowPlaying) setPlayerState(IDLE_PLAYER_STATE);
+  }, [queue.nowPlaying]);
+
+  /** Moves the queue on by one entry. Works while idle so the host can start
+   *  the first song from the Next button. */
+  const advanceQueue = useCallback(
+    async (control: "skip" | "complete") => {
+      const token = useRoomStore.getState().hostToken;
+      if (!isHost || !token) return false;
+      return roomApi.queueControl(roomCode, token, control);
+    },
+    [isHost, roomCode],
+  );
 
   const handleSettingsChange = async (next: HostSettings) => {
     if (!isHost || !hostToken) return;
@@ -88,10 +106,6 @@ export default function KaraokeHostRoom({ roomCode }: KaraokeHostRoomProps) {
     return true;
   };
 
-  const handleViewSong = (item: QueueItem) => {
-    void item;
-  };
-
   const handleEndSession = async () => {
     if (isHost && hostToken) {
       await roomApi.endRoom(roomCode, hostToken);
@@ -119,6 +133,7 @@ export default function KaraokeHostRoom({ roomCode }: KaraokeHostRoomProps) {
         roomCode={roomCode}
         participantCount={participantCount}
         isHost={isHost}
+        hostName={room.hostName}
         onEndSession={handleEndSession}
       />
 
@@ -139,11 +154,18 @@ export default function KaraokeHostRoom({ roomCode }: KaraokeHostRoomProps) {
               <NowPlayingStage
                 song={queue.nowPlaying}
                 playerRef={playerRef}
+                canSkip={isHost}
+                onStateChange={setPlayerState}
                 onEnded={() => {
-                  if (isHost && settings.autoplayNext && hostToken) {
-                    void roomApi.queueControl(roomCode, hostToken, "complete");
-                  }
+                  if (settings.autoplayNext) void advanceQueue("complete");
                 }}
+                onSkip={
+                  isHost
+                    ? () => {
+                        void advanceQueue("skip");
+                      }
+                    : undefined
+                }
               />
             ) : (
               <WaitingScreen roomCode={roomCode} guestCount={participantCount} />
@@ -162,8 +184,9 @@ export default function KaraokeHostRoom({ roomCode }: KaraokeHostRoomProps) {
             settings={settings}
             onSettingsChange={handleSettingsChange}
             onAddSong={handleAddSong}
-            onViewSong={handleViewSong}
             playerRef={playerRef}
+            playerState={playerState}
+            onNext={advanceQueue}
             isHost={isHost}
           />
         </aside>
@@ -186,9 +209,9 @@ function GuestWaitingScreen({ roomCode, guestName }: { roomCode: string; guestNa
         </span>
         <div>
           <h1 className="text-2xl font-bold sm:text-3xl">Waiting for Approval</h1>
-          <p className="mt-2 text-sm text-text-tertiary sm:text-base">
-            Hi <span className="font-semibold text-white">{guestName}</span> — the host needs to
-            approve your request to join room{" "}
+          <p className="mx-auto mt-2 max-w-sm text-sm text-text-tertiary sm:text-base">
+            Hi <span className="font-semibold break-words text-white">{guestName}</span> — the host
+            needs to approve your request to join room{" "}
             <span className="font-mono font-bold text-accent">{roomCode}</span>.
           </p>
         </div>
@@ -241,19 +264,21 @@ interface HostHeaderProps {
   roomCode: string;
   participantCount: number;
   isHost: boolean;
+  hostName: string;
   onEndSession: () => void;
 }
 
-function HostHeader({ roomCode, participantCount, isHost, onEndSession }: HostHeaderProps) {
+function HostHeader({ roomCode, participantCount, isHost, hostName, onEndSession }: HostHeaderProps) {
   return (
     <header className="glass-strong relative z-10 flex shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-4 py-3 sm:px-6">
-      <div className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-[var(--radius-sm)] bg-accent shadow-[0_0_16px_var(--color-accent-glow)]">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-accent shadow-[0_0_16px_var(--color-accent-glow)]">
           <Mic className="h-4 w-4 text-surface-base" aria-hidden="true" />
         </span>
         <span className="hidden text-sm font-bold tracking-wide min-[400px]:inline sm:text-base">
-          Karaoke<span className="text-accent">Hub</span>
+          Mcpatenz-<span className="text-accent">KaraokeHub</span>
         </span>
+        <HostNameChip name={hostName} />
         <RoomPill code={roomCode} />
         <span className="hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-xs text-text-tertiary sm:inline-flex">
           <Users className="h-3.5 w-3.5" aria-hidden="true" />
@@ -281,9 +306,26 @@ function HostHeader({ roomCode, participantCount, isHost, onEndSession }: HostHe
   );
 }
 
+/**
+ * Names are capped at 15 characters, but narrow phones still need a hard stop so
+ * a long name can never push the room code or the exit button off-screen.
+ */
+function HostNameChip({ name }: { name: string }) {
+  if (!name) return null;
+  return (
+    <span
+      title={`Hosted by ${name}`}
+      className="flex min-w-0 max-w-[5.5rem] shrink items-center gap-1 text-[11px] font-medium text-text-tertiary min-[400px]:max-w-[8rem] sm:max-w-[10rem]"
+    >
+      <span className="hidden shrink-0 text-text-tertiary/70 min-[400px]:inline">by</span>
+      <span className="truncate text-white/90">{name}</span>
+    </span>
+  );
+}
+
 function RoomPill({ code }: { code: string }) {
   return (
-    <span className="inline-flex min-h-[44px] items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-1 text-[11px] font-mono font-bold uppercase tracking-[0.15em] text-accent shadow-[0_0_12px_var(--color-accent-glow)] sm:px-3">
+    <span className="inline-flex min-h-[44px] shrink-0 items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-1 text-[11px] font-mono font-bold uppercase tracking-[0.15em] text-accent shadow-[0_0_12px_var(--color-accent-glow)] sm:px-3">
       <span className="hidden sm:inline">Room:&nbsp;</span>
       {code}
     </span>
